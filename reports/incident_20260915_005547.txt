@@ -1,0 +1,38 @@
+**Incident Post‑Mortem Report – Checkout Service Database Timeout**
+
+| Item | Details |
+|------|---------|
+| **Incident ID** | CS‑DB‑2026‑09‑14 |
+| **Date / Time** | 2026‑09‑14 08:32 UTC |
+| **Affected Service** | checkout‑service |
+| **Primary Symptom** | `ERROR: Database connection timeout after 30s at checkout-service` |
+| **Anomaly Detected** | Yes – connectivity issue |
+
+---
+
+### 1. Summary  
+At 08:32 UTC the checkout‑service failed to establish a TCP connection to the PostgreSQL database, resulting in a 30‑second timeout error. The service was unable to process checkout requests until the issue was resolved.
+
+---
+
+### 2. Root Cause  
+The checkout‑service could not open a TCP connection to the database within the configured 30‑second timeout. The most probable cause is a network partition or firewall rule that blocks inbound traffic to the database port (5432) from the checkout‑service subnet.  
+**Root‑cause confidence:** 0.7
+
+---
+
+### 3. Recommended Fix  
+1. **Verify Security Group / Firewall Rules** – Ensure the database’s inbound rules allow traffic on port 5432 from the checkout‑service subnet CIDR.  
+2. **Check Network ACLs** – If a network ACL or host‑based firewall is present, add a rule permitting traffic from the checkout‑service CIDR to the database CIDR.  
+3. **Apply Changes & Restart** – After updating the rules, restart the checkout‑service to re‑establish the connection.  
+
+**Fix confidence:** 0.9
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 70 %  
+- **Fix confidence:** 90 %  
+- **Human review required:** No  
+
+---
