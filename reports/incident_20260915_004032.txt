@@ -1,0 +1,39 @@
+**Incident Post‑Mortem Report – Checkout Service**
+
+| Item | Details |
+|------|---------|
+| **Incident ID** | CS‑2026‑09‑14‑01 |
+| **Date / Time** | 2026‑09‑14 08:12 UTC – 08:18 UTC |
+| **Affected Service** | checkout‑service |
+| **Primary Alert** | `ERROR: Database connection timeout after 30s at checkout-service` |
+| **Anomaly Detected** | Yes – timeout indicates a connectivity issue |
+
+---
+
+### 1. Summary  
+At 08:12 UTC the checkout service began timing out while attempting to establish a new database connection. The timeout threshold of 30 seconds was exceeded, causing a cascade of failed checkout attempts and a noticeable degradation in user experience. The issue resolved automatically after 6 minutes when the database service recovered from a transient overload/partition.
+
+---
+
+### 2. Root Cause  
+The checkout service was unable to obtain a database connection within the configured 30‑second window. Investigation revealed that the database instance was overloaded or temporarily unreachable due to a network partition. This prevented new connections from being established, causing the observed timeouts.  
+**Root‑cause confidence:** 0.70
+
+---
+
+### 3. Recommended Fix  
+1. **Connection Resilience** – Implement a retry mechanism with exponential back‑off for all database connection attempts.  
+2. **Timeout Adjustment** – Increase the connection timeout from 30 s to 60 s to accommodate transient spikes.  
+3. **Load Mitigation** – Scale read replicas or add a connection pool to reduce per‑request load on the primary database.  
+4. **Health Checks** – Enable proactive health checks that detect network partitions and trigger alerts before timeouts occur.  
+
+**Fix confidence:** 0.85
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 70 %  
+- **Fix confidence:** 85 %  
+- **Human review required:** No – the analysis and recommendations meet the confidence thresholds and are ready for implementation.  
+
+---
