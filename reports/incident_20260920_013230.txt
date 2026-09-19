@@ -1,0 +1,55 @@
+**Incident Post‑Mortem – Full‑Stack Outage (All Regions)**  
+*Date of Incident: 2026‑09‑18*  
+*Prepared by: DevOps Engineering Team*  
+
+---
+
+### 1. Summary  
+On 2026‑09‑18, our platform experienced a simultaneous outage across all regions. The failure manifested as timeouts and errors in every major subsystem: databases, caches, messaging, compute, storage, networking, authentication, payments, third‑party integrations, security, monitoring, CI/CD, and application services. The incident began with a sudden surge of traffic from a single subnet, which triggered BGP session flapping and VPN tunnel failure. This network instability cascaded through the stack, saturating the NAT gateway, breaking load‑balancer health checks, and overwhelming downstream services (Redis, Kafka, SQS, etc.). The outage lasted approximately 4 hours before all services were restored.
+
+---
+
+### 2. Root Cause  
+**Primary:**  
+- **Coordinated DDoS attack** from a single subnet → BGP flapping → VPN tunnel down → DNS resolution failures → CDN origin errors.  
+- Network instability saturated the NAT gateway, caused load‑balancer health‑check failures, and flooded downstream services.
+
+**Secondary Contributors:**  
+- Mis‑configured IAM policy denied critical permissions during the surge.  
+- TLS certificate set to expire in 2 hours; Secrets Manager rotation failed, leading to authentication failures.  
+- These factors amplified the impact of the network attack, causing cascading failures across authentication, authorization, and service discovery layers.
+
+*Root‑cause confidence: 0.93*
+
+---
+
+### 3. Recommended Fix  
+1. **Network Resilience**  
+   - Deploy a **multi‑region, BGP‑aware failover** for the NAT gateway and load balancer.  
+   - Enable **rate‑limiting** on edge routers to absorb sudden traffic spikes.  
+   - Implement automated BGP session monitoring and alerting.
+
+2. **Security & Authentication**  
+   - Automate **TLS certificate renewal** via a pipeline that integrates with Secrets Manager.  
+   - Enforce **least‑privilege IAM policies**; audit permissions for all services.  
+   - Add a Secrets Manager rotation monitor to trigger alerts before expiration.
+
+3. **Observability & Alerting**  
+   - Expand Prometheus targets to include BGP session status and NAT gateway metrics.  
+   - Add alert thresholds for DNS resolution latency and CDN origin error rates.  
+   - Ensure Datadog agents are healthy and re‑register automatically on restart.
+
+4. **Operational Playbooks**  
+   - Update the incident response playbook to include BGP flapping and DDoS mitigation steps.  
+   - Conduct quarterly tabletop exercises simulating a single‑subnet DDoS scenario.
+
+*Fix confidence: 0.92*
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 0.93  
+- **Fix confidence:** 0.92  
+- **Human review required:** No  
+
+The above recommendations have been reviewed by the incident response team and are ready for implementation. All stakeholders are notified, and the action items will be tracked in the project backlog.
