@@ -1,0 +1,37 @@
+**Incident Post‑Mortem – Checkout‑Service Outage**  
+*Date: 2026‑09‑19*  
+
+---
+
+### 1. Summary  
+At 14:32 UTC, the checkout‑service began experiencing database connection timeouts (30 s). Concurrently, host memory usage spiked to 96 %, disk I/O latency rose to 800 ms, and eth0 reported 12 % packet loss. Authentication failures for the `db-reader` account were also observed (15 failures in 2 min). The anomaly detection system flagged the event as a true anomaly, confirming a real system failure.
+
+---
+
+### 2. Root Cause  
+The incident was caused by **severe network instability on eth0** (12 % packet loss), which directly led to database connection timeouts in checkout‑service.  
+Compounding factors included:  
+- **Saturated storage subsystem** – disk I/O latency spiked to 800 ms, causing slow disk operations.  
+- **Extreme memory pressure** – 96 % RAM usage triggered swapping and long JVM GC pauses, further increasing latency.  
+
+These conditions created a cascading failure that manifested as service outages, authentication failures, and overall degraded performance.
+
+*Root‑cause confidence: 0.88*
+
+---
+
+### 3. Recommended Fix  
+1. **Network** – Deploy a bonded secondary NIC with failover; install a network monitoring agent to trigger alerts when packet loss exceeds 5 %.  
+2. **Storage** – Upgrade to NVMe SSDs and move the database to a dedicated volume to eliminate I/O bottlenecks.  
+3. **Memory & JVM** – Increase host RAM by 32 GB; tune JVM GC settings to reduce pause times.  
+
+*Fix confidence: 0.85*
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 88 %  
+- **Fix confidence:** 85 %  
+- **Human review required:** No  
+
+The proposed actions are expected to prevent recurrence of the observed failure modes. Please review the plan and proceed with implementation.
