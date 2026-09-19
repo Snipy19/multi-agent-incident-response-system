@@ -1,11 +1,12 @@
 """
 RETRIEVER
 -----------
-Kaam: Naya log aane par, saved FAISS index mein se sabse SIMILAR
-purane patterns dhoondhna (top-k).
+Kaam: Naya log aane par, saved FAISS index (multi-dataset knowledge base)
+mein se sabse SIMILAR purane real-world patterns dhoondhna (top-k).
 
-Ye "search karo purane incidents mein" wala function hai jo
-baad mein Investigator/Aggregator prompts mein context ke tarah use hoga.
+Ye function Investigator agents ke andar call hota hai - jitne bhi
+Investigators dynamically spawn hon (1 ho, 5 ho, 100 ho), har ek apna
+alag RAG search independently karta hai apne angle ke context mein.
 """
 
 import faiss
@@ -31,12 +32,10 @@ def retrieve_similar_patterns(query_log: str, top_k: int = 3) -> list[dict]:
     top_k: kitne sabse similar patterns chahiye
 
     Return: list of dicts, har ek mein 'template', 'level', 'component',
-    'distance' (kam distance = zyada similar)
+    'dataset', 'distance' (kam distance = zyada similar)
     """
-    # Query ko bhi usi model se embedding mein convert karo
     query_embedding = _model.encode([query_log])
 
-    # FAISS se top_k sabse similar embeddings dhoondo
     distances, indices = _index.search(np.array(query_embedding).astype("float32"), top_k)
 
     results = []
@@ -46,6 +45,7 @@ def retrieve_similar_patterns(query_log: str, top_k: int = 3) -> list[dict]:
             "template": row["EventTemplate"],
             "level": row["Level"],
             "component": row["Component"],
+            "dataset": row["Dataset"],
             "distance": float(dist)
         })
 
@@ -59,4 +59,4 @@ if __name__ == "__main__":
 
     results = retrieve_similar_patterns(test_log, top_k=3)
     for i, r in enumerate(results, 1):
-        print(f"{i}. [{r['level']}] {r['component']}: {r['template']} (distance: {r['distance']:.2f})")
+        print(f"{i}. [{r['dataset']}/{r['level']}] {r['component']}: {r['template']} (distance: {r['distance']:.2f})")

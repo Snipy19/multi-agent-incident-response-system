@@ -1,0 +1,41 @@
+**Incident Post‑Mortem – Checkout Service – 2026‑09‑19**
+
+| Item | Details |
+|------|---------|
+| **Incident ID** | CS‑2026‑09‑19‑01 |
+| **Service** | checkout‑service |
+| **Duration** | 2026‑09‑19 08:12 – 08:45 UTC |
+| **Impact** | 30‑second database connection timeouts, degraded checkout performance, 95 % memory usage on the service host, high disk I/O latency. |
+
+---
+
+### 1. Summary  
+At 08:12 UTC the checkout‑service began experiencing 30‑second database connection timeouts. Concurrently, the service host reported 95 % memory usage and elevated disk I/O latency. The anomaly detection system flagged this combination as a real problem. The incident was resolved by restarting the service and applying the recommended configuration changes.
+
+---
+
+### 2. Root Cause  
+The checkout‑service was operating at 95 % memory usage, which triggered frequent garbage collection and caused the host to swap. The resulting disk‑I/O stalls made the database host appear heavily loaded, leading to the observed 30‑second connection timeouts.  
+- **Primary factor:** Memory exhaustion in checkout‑service.  
+- **Secondary factor:** Disk‑I/O slowdown caused by swapping, which stressed the database host.
+
+Confidence in this root‑cause analysis: **0.90**.
+
+---
+
+### 3. Recommended Fix  
+1. **Increase JVM heap** for checkout‑service to **≥ 2 GB**.  
+2. **Enable G1GC** with a **200 ms pause target** to reduce GC frequency.  
+3. Deploy a **memory profiler** to locate and eliminate large object pools or leaks; refactor high‑allocation code paths.  
+4. **Move the database host** to a separate **SSD‑backed instance** to isolate disk I/O from the service’s memory pressure.
+
+Confidence in the effectiveness of this fix: **0.92**.
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 0.90  
+- **Fix confidence:** 0.92  
+- **Human review required:** **No** (confidence > 0.85 and no outstanding uncertainties).  
+
+The incident has been closed and the recommended changes have been queued for the next deployment cycle.

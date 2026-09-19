@@ -14,7 +14,7 @@ from datetime import datetime
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
-
+from utils.llm_helper import invoke_with_retry
 load_dotenv()
 
 llm = ChatGroq(
@@ -47,7 +47,7 @@ Write a clean, professional incident report with these sections:
 
 Keep it concise but professional, as if it will be read by an engineering team."""
 
-    response = llm.invoke(prompt)
+    response = invoke_with_retry(llm, prompt)
     report_text = response.content.strip()
 
     state["final_report"] = report_text

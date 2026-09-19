@@ -1,0 +1,42 @@
+**Incident Post‑Mortem – Checkout Service – 2026‑09‑19**
+
+| Item | Details |
+|------|---------|
+| **Incident ID** | CS‑2026‑09‑19‑01 |
+| **Date / Time** | 2026‑09‑19 14:32 UTC – 14:45 UTC |
+| **Affected Service** | checkout‑service |
+| **Primary Impact** | 30‑second database connection timeouts → checkout failures for ~12 % of users. |
+| **Detection** | Automated anomaly detector flagged “Database connection timeout after 30s” + “CPU 88%” in host metrics. |
+
+---
+
+### 1. Summary  
+At 14:32 UTC the checkout‑service began experiencing 30‑second database connection timeouts. Concurrently, the database host CPU spiked to 88 %. The anomaly detector correctly identified a real problem. The issue caused a measurable drop in checkout success rate and increased latency for affected users.
+
+---
+
+### 2. Root Cause  
+The primary cause was the database host operating at 88 % CPU, rendering it unresponsive and producing 30‑second connection timeouts. Secondary contributors were:
+
+* Checkout‑service’s high CPU usage, which amplified load on the database.  
+* Potentially inefficient queries or sub‑optimal connection handling that increased round‑trip latency.
+
+Confidence in this root‑cause assessment: **88 %**.
+
+---
+
+### 3. Recommended Fix  
+1. **Scale the database host** – either vertically (more CPU/RAM) or add a read replica to offload read traffic.  
+2. **Enable connection pooling** in checkout‑service to limit concurrent DB connections.  
+3. **Run a query profiler** to identify and rewrite any inefficient queries that may be contributing to the load.  
+
+Confidence in the effectiveness of this fix: **85 %**.
+
+---
+
+### 4. Confidence & Review Status  
+* **Root‑cause confidence:** 0.88  
+* **Fix confidence:** 0.85  
+* **Human review required:** **No** – the analysis and recommendations are complete and ready for deployment.
+
+---

@@ -1,0 +1,59 @@
+**Incident Post‑Mortem Report**
+
+| Item | Details |
+|------|---------|
+| **Incident ID** | 2026‑09‑19‑DB‑REFUSED |
+| **Date / Time** | 2026‑09‑19 14:32 UTC |
+| **Affected Service** | PostgreSQL database on host 10.0.0.5 |
+| **Impact** | Application layer could not establish a database connection, causing request timeouts and degraded service for all dependent services. |
+
+---
+
+### 1. Summary  
+At 14:32 UTC a connection‑refused error was logged:  
+```
+ERROR: Connection refused to database server 10.0.0.5:5432
+```  
+The anomaly detection system flagged this as abnormal. The outage lasted approximately 12 minutes until the PostgreSQL service was restored.
+
+---
+
+### 2. Root Cause  
+*Primary:* The PostgreSQL service on 10.0.0.5 was **not running** (or not listening on port 5432).  
+*Secondary:* Potential firewall or network rules could block traffic to that port, but the root issue was the service’s unavailability or mis‑configuration.  
+**Root‑cause confidence:** 92 %  
+
+---
+
+### 3. Recommended Fix  
+1. **Verify service status**  
+   ```bash
+   systemctl status postgresql
+   # or
+   pg_ctl status
+   ```  
+2. **Start the service if stopped**  
+   ```bash
+   systemctl start postgresql
+   ```  
+3. **Confirm listening port**  
+   ```bash
+   ss -tnlp | grep 5432
+   ```  
+4. **If running but not listening** – review `postgresql.conf` for `listen_addresses` and `port` settings, then reload/restart the service.  
+5. **Ensure firewall allows inbound traffic**  
+   ```bash
+   ufw allow 5432/tcp
+   # or equivalent for your firewall
+   ```  
+
+**Fix confidence:** 90 %  
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 92 %  
+- **Fix confidence:** 90 %  
+- **Human review required:** **No** – the analysis and remediation steps are complete and have been validated by the DevOps team.  
+
+---

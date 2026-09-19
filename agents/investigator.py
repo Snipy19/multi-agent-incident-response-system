@@ -1,8 +1,12 @@
 """
-INVESTIGATOR AGENT
----------------------
+INVESTIGATOR AGENT (RAG-integrated)
+--------------------------------------
 Kaam: EK specific angle (jaise "Database" ya "Memory") ko deeply investigate
-karna aur uska finding wapas dena.
+karna, RAG se similar purane real-world patterns ka context lena, aur
+finding wapas dena.
+
+IMPORTANT: Ye ek hi function hai jo Orchestrator ke decide kiye har angle
+ke liye ALAG SE, PARALLEL mein chalega.
 """
 
 import os
@@ -10,7 +14,8 @@ import json
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState, InvestigationFinding
-
+from vectorstore.retriever import retrieve_similar_patterns
+from utils.llm_helper import invoke_with_retry
 load_dotenv()
 
 llm = ChatGroq(
@@ -26,13 +31,23 @@ def investigator_agent(state: dict) -> dict:
 
     print(f"\n[INVESTIGATOR - {angle}] Investigation shuru...")
 
+    # RAG: similar purane patterns dhoondo real-world knowledge base se
+    similar_patterns = retrieve_similar_patterns(raw_log, top_k=3)
+    context_text = "\n".join(
+        [f"- [{p['dataset']}/{p['level']}] {p['template']}" for p in similar_patterns]
+    )
+
+    print(f"[INVESTIGATOR - {angle}] RAG context mila:\n{context_text}")
+
     prompt = f"""You are a DevOps specialist focused specifically on the "{angle}" aspect of a system.
 
 Log entry:
 "{raw_log}"
 
-Analyze this log ONLY from the "{angle}" perspective. What does this log tell us
-about potential {angle}-related issues?
+Here are similar log patterns observed in real production systems in the past (for reference context, not necessarily the same incident):
+{context_text}
+
+Analyze this log ONLY from the "{angle}" perspective. Use the reference patterns above if relevant to inform your analysis, but base your finding primarily on the actual log entry. What does this log tell us about potential {angle}-related issues?
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{
@@ -40,7 +55,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     "confidence": 0.0 to 1.0
 }}"""
 
-    response = llm.invoke(prompt)
+    response = invoke_with_retry(llm, prompt)
     raw_output = response.content.strip()
 
     print(f"[INVESTIGATOR - {angle}] LLM ka raw output: {raw_output}")

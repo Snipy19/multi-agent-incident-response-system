@@ -9,7 +9,7 @@ import json
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
-
+from utils.llm_helper import invoke_with_retry
 load_dotenv()
 
 llm = ChatGroq(
@@ -45,7 +45,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     "confidence": 0.0 to 1.0
 }}"""
 
-    response = llm.invoke(prompt)
+    response = invoke_with_retry(llm, prompt)
     raw_output = response.content.strip()
 
     print(f"[AGGREGATOR AGENT] LLM ka raw output: {raw_output}")

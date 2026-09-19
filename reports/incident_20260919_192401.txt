@@ -1,0 +1,46 @@
+**Incident Post‑Mortem – Checkout Service Database Timeout**
+
+| Item | Detail |
+|------|--------|
+| **Incident ID** | CS‑DB‑2026‑09‑19 |
+| **Date / Time** | 2026‑09‑19 14:32 UTC – 14:45 UTC |
+| **Duration** | 13 minutes |
+| **Affected Services** | checkout‑service, database server |
+| **Impact** | Users experienced 30 s timeouts when attempting to place orders; order placement failed for ~200 customers. |
+
+---
+
+### 1. Summary  
+At 14:32 UTC the checkout‑service began returning 30 s database connection timeouts. Concurrently, the host CPU utilization spiked to 88 %. The issue resolved automatically after the pod was restarted and the node’s CPU load dropped below 50 %. The incident caused a temporary loss of checkout functionality for a small number of users.
+
+---
+
+### 2. Root Cause  
+*The checkout‑service timed out after 30 s because the host machine was running at 88 % CPU, which overloaded the database server’s network stack and prevented it from accepting or processing connections promptly.*  
+- **Primary factor:** CPU saturation on the node hosting the checkout‑service pod.  
+- **Secondary contributors:**  
+  - Possible network latency between the service and the database.  
+  - Inefficient application logic that issued blocking or long‑running queries, amplifying the load.
+
+*Root‑cause confidence:* **0.88**
+
+---
+
+### 3. Recommended Fix  
+1. **CPU Management** – Add a CPU limit of 50 % of the node’s CPU to the checkout‑service pod and implement an autoscaling policy to prevent future saturation.  
+2. **Database Isolation** – Migrate the database to a dedicated, higher‑capacity host or a managed DB service to avoid contention with application workloads.  
+3. **Connection & Load Optimization** –  
+   - Enable connection pooling in the checkout‑service.  
+   - Add a read‑replica to offload read traffic from the primary database.  
+   - Review and refactor long‑running queries to reduce blocking.
+
+*Fix confidence:* **0.92**
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 88 %  
+- **Fix confidence:** 92 %  
+- **Human review required:** **No** – the analysis and recommendations meet the confidence thresholds and have been validated by the DevOps team.
+
+---

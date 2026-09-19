@@ -13,7 +13,7 @@ import json
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
-
+from utils.llm_helper import invoke_with_retry
 
 load_dotenv()
 
@@ -44,7 +44,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 }}"""
 
     # LLM ko call karo
-    response = llm.invoke(prompt)
+    response = invoke_with_retry(llm, prompt)
     raw_output = response.content.strip()
 
     print(f"[LOG MONITOR AGENT] LLM ka raw output: {raw_output}")
