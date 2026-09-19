@@ -1,11 +1,5 @@
 """
 DOCUMENTATION WRITER AGENT
-------------------------------
-Kaam: Pura incident (kya hua, kyun hua, kaise fix hua) ek clean,
-professional report mein likhna - jaise real companies mein
-"post-mortem" document banta hai.
-
-Ye report ek .txt file mein bhi save hota hai reports/ folder mein.
 """
 
 import os
@@ -15,11 +9,14 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
 from utils.llm_helper import invoke_with_retry
+
 load_dotenv()
 
 llm = ChatGroq(
     model="openai/gpt-oss-20b",
     temperature=0,
+    max_tokens=2048,
+    reasoning_effort="low",
     api_key=os.getenv("GROQ_API_KEY")
 )
 
@@ -52,7 +49,6 @@ Keep it concise but professional, as if it will be read by an engineering team."
 
     state["final_report"] = report_text
 
-    # Report ko file mein bhi save kar do
     os.makedirs("reports", exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     filepath = f"reports/incident_{timestamp}.txt"

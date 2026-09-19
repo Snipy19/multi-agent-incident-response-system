@@ -1,12 +1,5 @@
 """
 INVESTIGATOR AGENT (RAG-integrated)
---------------------------------------
-Kaam: EK specific angle (jaise "Database" ya "Memory") ko deeply investigate
-karna, RAG se similar purane real-world patterns ka context lena, aur
-finding wapas dena.
-
-IMPORTANT: Ye ek hi function hai jo Orchestrator ke decide kiye har angle
-ke liye ALAG SE, PARALLEL mein chalega.
 """
 
 import os
@@ -16,11 +9,14 @@ from langchain_groq import ChatGroq
 from state import IncidentState, InvestigationFinding
 from vectorstore.retriever import retrieve_similar_patterns
 from utils.llm_helper import invoke_with_retry
+
 load_dotenv()
 
 llm = ChatGroq(
     model="openai/gpt-oss-20b",
     temperature=0,
+    max_tokens=2048,
+    reasoning_effort="low",
     api_key=os.getenv("GROQ_API_KEY")
 )
 
@@ -31,9 +27,6 @@ def investigator_agent(state: dict) -> dict:
 
     print(f"\n[INVESTIGATOR - {angle}] Investigation shuru...")
 
-    # RAG: similar purane patterns dhoondo real-world knowledge base se
-        # Query ko angle-specific banate hain, taaki har investigator ko
-    # apne specific angle ke relevant patterns milein, sabko same generic context nahi
     angle_specific_query = f"{angle}: {raw_log}"
     similar_patterns = retrieve_similar_patterns(angle_specific_query, top_k=3)
     context_text = "\n".join(

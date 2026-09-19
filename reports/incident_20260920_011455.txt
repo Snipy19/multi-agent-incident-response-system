@@ -1,0 +1,39 @@
+**Incident Post‑Mortem – Checkout Platform**  
+*Date of Incident: 2026‑09‑18 14:32 UTC – 2026‑09‑18 18:07 UTC*  
+
+---
+
+### 1. Summary  
+A multi‑service degradation impacted the checkout experience. The incident began when Kubernetes nodes in the `checkout-prod` namespace entered **DiskPressure**. This triggered pod evictions and CrashLoopBackOff for eight critical checkout pods, cascading failures across Redis, Kafka, RabbitMQ, PostgreSQL, S3, and external payment services. The result was a 30 % increase in checkout failures, 503 errors from Stripe, and a 480,000‑message consumer lag in Kafka.
+
+---
+
+### 2. Root Cause  
+**Primary:**  
+- **Kubernetes DiskPressure** on two nodes caused eviction of essential checkout pods.  
+- Evicted pods led to high Redis memory usage, session store latency, and OAuth token refresh failures.  
+- Stalled pods slowed Kafka consumers and RabbitMQ processing, creating large consumer lags and unacknowledged message backlogs.
+
+**Secondary (downstream):**  
+- PostgreSQL replication lag (210 s) and S3 throttling (503 SlowDown) compounded the instability but were consequences of the initial node disk exhaustion.
+
+*Root‑cause confidence: 0.93*
+
+---
+
+### 3. Recommended Fix  
+1. **Persistent Storage** – Attach local SSD persistent volume claims to all checkout pods to isolate disk usage from node storage.  
+2. **Node Auto‑Scaling** – Enable cluster autoscaler with disk‑usage thresholds (e.g., 80 % usage) to add nodes before DiskPressure occurs.  
+3. **Eviction Policy** – Configure a disk‑pressure eviction policy that prioritizes non‑critical pods, preventing critical checkout pods from being evicted.  
+4. **Monitoring & Alerts** – Add Prometheus alerts for node disk usage and pod eviction events; ensure Grafana dashboards reflect real‑time disk metrics.
+
+*Fix confidence: 0.92*
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 0.93  
+- **Fix confidence:** 0.92  
+- **Human review required:** No  
+
+The proposed changes should eliminate the DiskPressure trigger, stabilize dependent services, and prevent recurrence of this incident.

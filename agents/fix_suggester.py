@@ -1,13 +1,5 @@
 """
 FIX SUGGESTER AGENT
-----------------------
-Kaam: root_cause dekh kar ek concrete fix suggest karna.
-
-IMPORTANT LOGIC: agar root_cause_confidence bahut low hai (< 0.5),
-toh hum LLM se fix maangte hi nahi - seedha flag laga dete hain
-"needs_human_review = True". Ye real-world mein important hai:
-agar diagnosis khud uncertain hai, blindly fix suggest karna
-production mein galat action le sakta hai.
 """
 
 import os
@@ -16,11 +8,14 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
 from utils.llm_helper import invoke_with_retry
+
 load_dotenv()
 
 llm = ChatGroq(
     model="openai/gpt-oss-20b",
     temperature=0,
+    max_tokens=2048,
+    reasoning_effort="low",
     api_key=os.getenv("GROQ_API_KEY")
 )
 

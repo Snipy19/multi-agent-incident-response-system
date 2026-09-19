@@ -1,17 +1,5 @@
 """
 ORCHESTRATOR AGENT
----------------------
-Kaam: Log dekh kar decide karna ki iss incident ko investigate karne ke
-liye kitne aur kaunse "angles" (aspects) chahiye.
-
-Jaise: agar log sirf database timeout bolta hai -> sirf 1 angle (Database)
-Agar log complex multi-system outage hai -> 10, 20, ya zyada angles
-
-Ye list DYNAMIC hai - LLM khud decide karta hai kitni lambi honi chahiye.
-Agar pehla attempt fail ho jaaye (bahut lambe/complex logs ke saath LLM
-kabhi kabhi khali response deta hai), toh ek chhota fallback prompt se
-retry karte hain, taaki system crash na ho aur "General" pe fall back
-karna bhi rare case ban jaaye.
 """
 
 import os
@@ -26,7 +14,8 @@ load_dotenv()
 llm = ChatGroq(
     model="openai/gpt-oss-20b",
     temperature=0,
-    max_tokens=1024,
+    max_tokens=4096,
+    reasoning_effort="low",
     api_key=os.getenv("GROQ_API_KEY")
 )
 
@@ -48,8 +37,16 @@ Anomaly reason:
 Identify EVERY distinct technical angle/aspect that needs to be investigated
 to fully understand this incident. This log may describe a SIMPLE single-issue
 problem (1 angle) or a COMPLEX multi-system outage (10, 20, or more angles).
-Be thorough - if the log mentions many separate systems, symptoms, or components,
-list a SEPARATE angle for each one. Do not merge distinct issues into one angle.
+
+CRITICAL RULE: Scan the log for every named service, system, or component
+mentioned (e.g. specific microservices, databases, message queues, cloud
+resources, Kubernetes, third-party vendors, security systems). EVERY named
+system with a reported problem MUST get its own angle - do not skip any of
+them, even if they seem minor. Only merge symptoms together when they belong
+to the SAME underlying system (e.g. CPU + memory + disk on the SAME host can
+be one "Resource Exhaustion" angle) - never merge across different named
+services or vendors.
+
 Keep each angle name SHORT (1-3 words, e.g. "Database", "TLS Certificates", "Kafka Lag").
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
@@ -59,7 +56,6 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 
     angles = None
 
-    # Pehla attempt - normal prompt
     try:
         response = invoke_with_retry(llm, prompt)
         raw_output = response.content.strip()
@@ -69,11 +65,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     except (json.JSONDecodeError, KeyError, AttributeError) as e:
         print(f"[ORCHESTRATOR AGENT] Pehla attempt fail hua: {e}. Simpler prompt se retry kar rahe hain...")
 
-        # Doosra attempt - chhota, simpler prompt (agar bada log confuse kar raha tha)
-        fallback_prompt = f"""List the main technical problem categories mentioned in this incident log, as a JSON array of short labels (1-3 words each).
+        fallback_prompt = f"""List every named service, system, or component in this incident log that has a reported problem, as a JSON array of short labels (1-3 words each). Do not skip any named system.
 
-Log (first 800 characters):
-"{raw_log[:800]}"
+Log (first 1200 characters):
+"{raw_log[:1200]}"
 
 Respond ONLY with JSON: {{"angles": ["label1", "label2", ...]}}"""
 

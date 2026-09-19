@@ -1,9 +1,5 @@
 """
 AGGREGATOR AGENT (RAG-integrated)
--------------------------------------
-Kaam: Saare Investigators ke findings (jo alag alag angles se aaye)
-ko ek combined, unified root cause mein summarize karna - saath mein
-RAG se overall incident ke similar purane patterns ka context bhi lena.
 """
 
 import os
@@ -19,6 +15,8 @@ load_dotenv()
 llm = ChatGroq(
     model="openai/gpt-oss-20b",
     temperature=0,
+    max_tokens=2048,
+    reasoning_effort="low",
     api_key=os.getenv("GROQ_API_KEY")
 )
 
@@ -34,7 +32,6 @@ def aggregator_agent(state: IncidentState) -> IncidentState:
 
     print(f"[AGGREGATOR AGENT] Total {len(findings)} findings mile:\n{findings_text}")
 
-    # RAG: overall incident ke context mein similar patterns dhoondo
     similar_patterns = retrieve_similar_patterns(state["raw_log"], top_k=3)
     rag_context = "\n".join(
         [f"- [{p['dataset']}/{p['level']}] {p['template']}" for p in similar_patterns]

@@ -1,0 +1,58 @@
+**Incident Post‑Mortem – Multi‑Region Outage**  
+*Date: 2026‑09‑19 | Duration: 4 h 23 min*  
+
+---
+
+### 1. Summary  
+A critical, multi‑region outage impacted the entire production fleet. Key symptoms included:
+
+- **Service failures** – database timeouts, SSL/TLS handshakes, authentication errors, and Kafka consumer lag.  
+- **Infrastructure saturation** – CPU steal (40 %), memory at 98 % (OOM kills), disk at 96 % on `/var/log`, inode exhaustion on `/tmp`.  
+- **Network instability** – BGP route flapping, 18 % packet loss on inter‑AZ links, DNS resolution failures (15 %).  
+- **Third‑party disruptions** – Stripe, SendGrid, Twilio failures.  
+- **Security alerts** – WAF spikes, certificate pinning failures, privilege escalation attempt.  
+
+The outage propagated through Kubernetes (CrashLoopBackOff pods, NotReady nodes), storage (S3 503s, EBS latency), and application layers (NullPointerExceptions, deadlocks, circuit breakers).  
+
+---
+
+### 2. Root Cause  
+**Primary:**  
+- **Widespread resource exhaustion** (CPU, memory, disk, network) across multiple regions triggered cascading failures in services, Kubernetes, and third‑party integrations.
+
+**Secondary contributors:**  
+- Expired SSL certificates and BGP flapping amplified service instability.  
+- DNS resolution failures and lack of failover exacerbated the impact.  
+
+*Root‑cause confidence: 92 %*  
+
+---
+
+### 3. Recommended Fix  
+1. **Region‑aware autoscaling & resource limits**  
+   - Enforce CPU, memory, and disk quotas for all critical workloads.  
+   - Implement autoscaling policies that trigger before saturation thresholds are reached.
+
+2. **Circuit‑breaker layer**  
+   - Wrap all third‑party calls with a circuit breaker to prevent cascading failures.
+
+3. **Certificate & network monitoring**  
+   - Automate certificate rotation (e.g., cert‑manager).  
+   - Deploy BGP monitoring to detect flapping early.  
+   - Configure DNS failover with a secondary authoritative server.
+
+4. **Infrastructure hardening**  
+   - Increase disk capacity and enable inode limits on `/tmp`.  
+   - Optimize Kafka consumer throughput and backlog handling.  
+   - Review and tighten Kubernetes node health checks and HPA metrics.
+
+*Fix confidence: 88 %*  
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 92 %  
+- **Fix confidence:** 88 %  
+- **Human review required:** No  
+
+---

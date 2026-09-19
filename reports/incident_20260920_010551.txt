@@ -1,0 +1,56 @@
+**Incident Post‑Mortem – Multi‑Region Outage**  
+*Date: 2026‑09‑19 | Duration: 3 h 27 min*  
+
+---
+
+### 1. Summary  
+A critical, multi‑region outage impacted the entire production fleet. The incident began with a cascade of resource exhaustion (CPU, memory, disk, network) and configuration failures (expired TLS certificates, BGP flapping, DNS resolution errors). These conditions triggered widespread service failures across checkout, payment, auth, inventory, and other core components, as well as downstream third‑party integrations (Stripe, SendGrid, Twilio). The outage was detected by automated monitoring and escalated to the incident response team within minutes.
+
+---
+
+### 2. Root Cause  
+| Category | Key Findings | Impact |
+|----------|--------------|--------|
+| **Resource Exhaustion** | CPU steal 40 % on us‑east‑1a nodes, memory 98 % (OOM kills), disk 96 % on /var/log, inode exhaustion on /tmp | Service stalls, process termination, degraded I/O |
+| **Configuration Failures** | Expired TLS cert for `api.payments.internal`, BGP route flapping, DNS resolution failures for `internal.service.mesh` | TLS handshakes fail, routing instability, service discovery loss |
+| **Cascading Effects** | Kubernetes CrashLoopBackOff pods, node NotReady, HPA metrics missing, Redis session store unreachable, Kafka consumer lag | Loss of state, request timeouts, back‑pressure across services |
+| **Third‑Party Impact** | Stripe webhook timeouts, SendGrid 429s, Twilio delivery delays | Payment processing and notifications failed |
+| **Security & DDoS‑like Activity** | WAF blocking spike from single IP range, privilege escalation attempt on `ci-deploy-bot` | Added load, potential attack vector |
+
+The core trigger was the simultaneous collapse of resources and critical configuration items, which propagated failures through dependent services and external integrations.
+
+---
+
+### 3. Recommended Fix  
+1. **Observability & Alerting**  
+   - Deploy a unified stack (Prometheus + Grafana) with fine‑grained CPU, memory, disk, and network metrics.  
+   - Configure alert thresholds for CPU steal, memory usage, disk I/O, and network packet loss.  
+
+2. **Auto‑Scaling & Capacity Planning**  
+   - Implement auto‑scaling policies for compute nodes and Kubernetes deployments based on real‑time metrics.  
+   - Add pod disruption budgets and graceful shutdown hooks to prevent sudden resource spikes.  
+
+3. **Certificate Management**  
+   - Enable cert‑manager for automatic TLS renewal across all services.  
+   - Set up monitoring for certificate expiry dates.  
+
+4. **Network Stability**  
+   - Configure BGP route dampening to mitigate flapping.  
+   - Add DNS health checks and fallback mechanisms for critical internal domains.  
+
+5. **Resilience Enhancements**  
+   - Deploy circuit breakers and retry policies for downstream services (e.g., recommendation-service, payment gateway).  
+   - Run regular chaos‑engineering tests to validate the new observability and auto‑scaling controls.  
+
+6. **Security Hardening**  
+   - Review and tighten IAM policies for service accounts (e.g., `ci-deploy-bot`).  
+   - Strengthen WAF rules and implement rate limiting for suspicious IP ranges.  
+
+---
+
+### 4. Confidence & Review Status  
+- **Root Cause Confidence:** 94 %  
+- **Fix Confidence:** 85 %  
+- **Human Review Needed:** No  
+
+*Prepared by: DevOps Incident Response Team*
