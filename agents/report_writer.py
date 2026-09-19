@@ -62,4 +62,4 @@ Keep it concise but professional, as if it will be read by an engineering team."
 
     print(f"[DOCUMENTATION WRITER AGENT] Report ban gaya aur save hua: {filepath}")
 
-    return state
+    return {k: v for k, v in state.items() if k != "investigation_findings"}

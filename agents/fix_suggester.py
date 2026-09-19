@@ -37,7 +37,7 @@ def fix_suggester_agent(state: IncidentState) -> IncidentState:
         state["suggested_fix"] = "Confidence bahut low thi, isliye fix suggest nahi kiya gaya"
         state["fix_confidence"] = 0.0
         state["needs_human_review"] = True
-        return state
+        return {k: v for k, v in state.items() if k != "investigation_findings"}
 
     root_cause = state["root_cause"]
 
@@ -71,4 +71,4 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 
     print(f"[FIX SUGGESTER AGENT] Fix: {state['suggested_fix']} (confidence: {state['fix_confidence']}, human review: {state['needs_human_review']})")
 
-    return state
+    return {k: v for k, v in state.items() if k != "investigation_findings"}
