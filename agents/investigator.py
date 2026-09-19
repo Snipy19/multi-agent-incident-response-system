@@ -32,7 +32,10 @@ def investigator_agent(state: dict) -> dict:
     print(f"\n[INVESTIGATOR - {angle}] Investigation shuru...")
 
     # RAG: similar purane patterns dhoondo real-world knowledge base se
-    similar_patterns = retrieve_similar_patterns(raw_log, top_k=3)
+        # Query ko angle-specific banate hain, taaki har investigator ko
+    # apne specific angle ke relevant patterns milein, sabko same generic context nahi
+    angle_specific_query = f"{angle}: {raw_log}"
+    similar_patterns = retrieve_similar_patterns(angle_specific_query, top_k=3)
     context_text = "\n".join(
         [f"- [{p['dataset']}/{p['level']}] {p['template']}" for p in similar_patterns]
     )

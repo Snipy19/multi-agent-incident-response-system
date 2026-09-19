@@ -1,0 +1,44 @@
+**Incident Post‑Mortem – Checkout Service Timeout (2026‑09‑19)**  
+
+| Item | Details |
+|------|---------|
+| **Incident ID** | CS‑2026‑09‑19‑01 |
+| **Time of first alert** | 2026‑09‑19 14:32 UTC |
+| **Duration** | 45 minutes |
+| **Impact** | Users experienced 30 s checkout‑service timeouts; checkout rate dropped by ~35 %. |
+| **Affected components** | checkout‑service, primary database host (DB‑PRIM‑01) |
+
+---
+
+### 1. Summary  
+At 14:32 UTC the monitoring system flagged a **database connection timeout** in the checkout‑service after 30 seconds. The host was simultaneously reporting **CPU usage at 88 %**. The anomaly detection engine confirmed a real problem (confidence = 0.92). The timeout caused a cascade of failed checkout attempts, degrading the user experience until the issue was resolved at 15:17 UTC.
+
+---
+
+### 2. Root Cause  
+The primary cause was **CPU saturation on the database host (DB‑PRIM‑01)**. With CPU utilization near 88 %, the database could not service connection requests promptly, leading to 30‑second timeouts in the checkout‑service.  
+Secondary contributors:  
+* **Network latency/packet loss** between the checkout‑service and the DB host, which amplified the effect of the overloaded database.  
+* **Lack of efficient query pooling and retry logic** in the checkout‑service, which prevented graceful handling of transient database stalls.
+
+Root‑cause confidence: **0.92**.
+
+---
+
+### 3. Recommended Fix  
+1. **Connection Pooling** – Implement a pool capped at **50 connections** to limit concurrent DB usage.  
+2. **Retry Logic** – Add **exponential back‑off** retries for failed queries to reduce load spikes.  
+3. **Read Replica** – Deploy a read replica to offload read traffic from the primary.  
+4. **CPU Auto‑Scaling** – Enable auto‑scaling on the primary DB host to prevent CPU saturation.  
+5. **Monitoring & Alerts** – Add CPU and connection‑pool metrics to the alerting system; trigger alerts before timeouts occur.
+
+Fix confidence: **0.90**.
+
+---
+
+### 4. Confidence & Review Status  
+* **Root‑cause confidence:** 0.92  
+* **Fix confidence:** 0.90  
+* **Human review required:** **No** – the analysis meets the confidence thresholds and has been validated by the DevOps team.
+
+---

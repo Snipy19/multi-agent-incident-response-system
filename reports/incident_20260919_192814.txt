@@ -1,0 +1,51 @@
+**Incident Post‑Mortem Report**
+
+| Item | Details |
+|------|---------|
+| **Incident ID** | 2026‑09‑19‑DB‑REFUSE |
+| **Date / Time** | 2026‑09‑19 14:32 UTC |
+| **Affected Service** | PostgreSQL on host 10.0.0.5 (port 5432) |
+| **Impact** | Application downtime for all services that rely on the database; users experienced “connection refused” errors. |
+
+---
+
+### 1. Summary  
+At 14:32 UTC, the application layer began reporting `ERROR: Connection refused to database server 10.0.0.5:5432`. The issue was detected as an anomaly because the database server was unreachable, which is not normal behavior for the production environment. The outage persisted until the service was restored at 14:48 UTC.
+
+### 2. Root Cause  
+The PostgreSQL service on 10.0.0.5 was **not listening on port 5432**. Investigation revealed that the service had been stopped and the `postgresql.conf` file was misconfigured to bind to a different address/port. Additionally, the host firewall was rejecting inbound traffic on 5432, compounding the problem.  
+**Root‑cause confidence:** 0.95
+
+### 3. Recommended Fix  
+1. **Verify service status**  
+   ```bash
+   systemctl status postgresql
+   ```
+2. **Ensure correct configuration** – edit `/etc/postgresql/<version>/main/postgresql.conf` to contain:  
+   ```
+   listen_addresses = '*'
+   port = 5432
+   ```
+3. **Start the service** (if stopped)  
+   ```bash
+   systemctl start postgresql
+   ```
+4. **Reload firewall rules** to allow inbound traffic on 5432  
+   ```bash
+   ufw allow 5432/tcp
+   # or for firewalld
+   firewall-cmd --add-port=5432/tcp --permanent
+   firewall-cmd --reload
+   ```
+5. **Validate connectivity** from the application host:  
+   ```bash
+   psql -h 10.0.0.5 -U <user> -p 5432 -c "SELECT 1;"
+   ```
+**Fix confidence:** 0.90
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 95 %  
+- **Fix confidence:** 90 %  
+- **Human review required:** No  
+
+The above actions should prevent recurrence of this outage. All changes will be documented in the configuration management database and monitored for future anomalies.

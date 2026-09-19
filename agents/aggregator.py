@@ -1,7 +1,9 @@
 """
-AGGREGATOR AGENT
--------------------
-Kaam: Saare Investigators ke findings ko ek combined root cause mein summarize karna.
+AGGREGATOR AGENT (RAG-integrated)
+-------------------------------------
+Kaam: Saare Investigators ke findings (jo alag alag angles se aaye)
+ko ek combined, unified root cause mein summarize karna - saath mein
+RAG se overall incident ke similar purane patterns ka context bhi lena.
 """
 
 import os
@@ -9,7 +11,9 @@ import json
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
+from vectorstore.retriever import retrieve_similar_patterns
 from utils.llm_helper import invoke_with_retry
+
 load_dotenv()
 
 llm = ChatGroq(
@@ -30,11 +34,20 @@ def aggregator_agent(state: IncidentState) -> IncidentState:
 
     print(f"[AGGREGATOR AGENT] Total {len(findings)} findings mile:\n{findings_text}")
 
+    # RAG: overall incident ke context mein similar patterns dhoondo
+    similar_patterns = retrieve_similar_patterns(state["raw_log"], top_k=3)
+    rag_context = "\n".join(
+        [f"- [{p['dataset']}/{p['level']}] {p['template']}" for p in similar_patterns]
+    )
+
     prompt = f"""You are a senior DevOps engineer synthesizing an incident investigation.
 
 Multiple specialists investigated this incident from different angles. Here are their findings:
 
 {findings_text}
+
+Similar patterns observed in real production systems in the past (for reference context):
+{rag_context}
 
 Synthesize these findings into ONE unified root cause explanation. Identify
 which finding(s) are most likely the PRIMARY cause versus contributing/secondary factors.

@@ -1,0 +1,53 @@
+**Incident Post‑Mortem – Checkout Service Outage**  
+*Date: 2026‑09‑19*  
+
+---
+
+### 1. Summary  
+At 14:32 UTC, the checkout‑service experienced a critical outage. The service failed to establish database connections, returned time‑outs, and logged authentication errors. Key symptoms included:
+
+- **Database connection timeout** (30 s)  
+- **Memory usage** at **96 %**  
+- **Disk I/O latency** spiking to **≈800 ms**  
+- **Network packet loss** on `eth0` at **12 %**  
+- **15 authentication failures** for the `db‑reader` account in the last 2 min  
+
+The anomaly detection system flagged the event as a system outage.
+
+---
+
+### 2. Root Cause  
+The primary cause was **extreme memory pressure** on the checkout‑service (≈96 % heap utilization). Frequent garbage‑collection pauses stalled database connections, leading to time‑outs. Secondary contributors:
+
+- **High disk‑I/O latency** (~800 ms) slowed data access.  
+- **Network packet loss** (12 %) on `eth0` increased timeouts and retransmissions.  
+- **Credential misconfiguration** for `db‑reader` caused repeated authentication failures, further aggravating connection issues.  
+
+**Root‑cause confidence:** **0.88** (high)
+
+---
+
+### 3. Recommended Fix  
+1. **Memory Management**  
+   - Increase JVM heap to **2 GB**.  
+   - Enable G1GC (`-XX:+UseG1GC`).  
+   - Add a memory‑usage alert threshold at **80 %**.  
+
+2. **Credential Rotation**  
+   - Rotate the `db‑reader` credentials.  
+   - Update service configuration to reference the new secret.  
+
+3. **Network & Storage**  
+   - Replace the failing NIC cable on `eth0` to eliminate packet loss.  
+   - Investigate and remediate disk I/O bottlenecks (e.g., check SSD health, adjust I/O scheduler).  
+
+**Fix confidence:** **0.85** (high)
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 88 %  
+- **Fix confidence:** 85 %  
+- **Human review required:** **No** – the analysis meets confidence thresholds and is ready for deployment.  
+
+---
