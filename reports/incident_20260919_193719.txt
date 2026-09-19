@@ -1,0 +1,46 @@
+**Incident Post‑Mortem – Checkout Service Database Timeout & Auth Failures**  
+*Date of Incident: 2026‑09‑19*  
+
+---
+
+### 1. Summary  
+At 14:32 UTC a critical alert was triggered for the **checkout-service**:  
+- **Database timeout** (30 s)  
+- **Memory usage** at **96 %**  
+- **15 failed authentication attempts** for the **db‑reader** account  
+
+The anomaly was confirmed as a real problem. The incident caused a temporary degradation of checkout functionality and a spike in authentication failures for downstream services.
+
+---
+
+### 2. Root Cause  
+The checkout-service was operating under **high memory pressure** (≈ 96 % utilization).  
+- Frequent **GC pauses** and **out‑of‑memory** conditions delayed database queries.  
+- These delays produced **30‑second database timeouts**.  
+- The timeouts caused the **db‑reader** account to repeatedly attempt authentication, leading to the observed failures.  
+
+**Primary root cause:** Memory pressure on the checkout-service.  
+**Secondary effects:** Database timeouts → authentication failures.  
+
+*Root‑cause confidence:* **0.90**
+
+---
+
+### 3. Recommended Fix  
+1. **Increase container memory limit** to **≥ 2 GB**.  
+2. **Enable G1GC** with a higher pause‑time goal:  
+   - `-XX:+UseG1GC`  
+   - `-XX:MaxGCPauseMillis=200`  
+3. **Profile memory usage** to identify and reduce memory‑intensive objects.  
+4. **Add a health‑check** that restarts the pod if memory usage exceeds **90 %** for more than **30 seconds**.  
+
+*Fix confidence:* **0.92**
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence:** 90 %  
+- **Fix confidence:** 92 %  
+- **Human review required:** **No** (confidence above threshold, no outstanding questions)
+
+---
