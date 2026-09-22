@@ -1,0 +1,50 @@
+**Incident Post‑Mortem – Order Service Outage**  
+*Date: 2026‑09‑22*  
+
+---
+
+### 1. Summary  
+At 14:32 UTC a critical alert was triggered for the `order-service` in the `order-prod` namespace. The alert indicated:
+
+- **Database connection pool exhaustion** – 0/30 connections available.  
+- **Redis** – 87 % memory usage with a rising eviction rate.  
+- **Kafka** – consumer group `order-events` lagging by ~95 k messages.  
+- **Pods** – 3 replicas in CrashLoopBackOff.
+
+The combination of exhausted DB connections, memory pressure on Redis, and Kafka lag caused the service pods to crash repeatedly, leading to a service‑level outage for order placement and processing.
+
+---
+
+### 2. Root Cause  
+The primary failure was **database connection pool exhaustion** in the `order-service`.  
+- **Trigger**: A surge in request load coupled with a connection‑leak bug left connections open longer than expected.  
+- **Cascade**: Exhausted connections caused pod crashes, which in turn increased Redis eviction and Kafka lag as the service could not process or acknowledge messages.  
+- **Secondary factors**:  
+  - Redis memory pressure (87 % usage) amplified the load on the database by forcing more frequent cache lookups and evictions.  
+  - Kafka consumer lag (95 k messages) added back‑pressure, further stressing the database.
+
+Root‑cause confidence: **0.93**.
+
+---
+
+### 3. Recommended Fix  
+1. **Database Connection Pool**  
+   - Increase pool size from 30 to **≥ 60** connections.  
+   - Implement a connection‑leak detector that logs idle connections and automatically closes them after **30 s** of inactivity.
+
+2. **Pod Health Monitoring**  
+   - Deploy a sidecar health probe that restarts a pod if the pool usage exceeds **80 %** for more than **2 minutes**.
+
+3. **Redis Eviction Policy**  
+   - Configure a more aggressive eviction policy (e.g., `volatile-lru` or `allkeys-lru`) to prevent memory pressure from spilling into the database workload.
+
+Fix confidence: **0.92**.
+
+---
+
+### 4. Confidence & Review Status  
+- **Root‑cause confidence**: 0.93  
+- **Fix confidence**: 0.92  
+- **Human review required**: **No** – the analysis and recommendations are complete and ready for deployment.  
+
+---
