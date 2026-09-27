@@ -1,54 +1,201 @@
 """
-FASTAPI BACKEND
-------------------
-Kaam: Hamare LangGraph pipeline ko ek web API bana dena, taaki
-frontend (ya koi bhi client) HTTP request bhej ke incident analyze kar sake.
-
-Ab isme database integration bhi hai - har incident SQLite mein
-save hota hai, aur past incidents ki list bhi fetch kar sakte hain.
+FASTAPI BACKEND (username/password + Google + Forgot Password/OTP)
+-----------------------------------------------------------------------
 """
 
+import os
 import uuid
-from fastapi import FastAPI
+import random
+from datetime import datetime, timedelta
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
+from google.oauth2 import id_token as google_id_token
+from google.auth.transport import requests as google_requests
+
 from graph import app as graph_app
-from db.database import init_db, save_incident, get_all_incidents, get_incident_by_id
+from db.database import (
+    init_db, save_incident, get_all_incidents, get_incident_by_id,
+    create_user, get_user_by_username, get_user_by_email, update_user_password,
+    get_user_by_google_id, create_google_user,
+    save_otp, get_otp, delete_otp
+)
+from auth import hash_password, verify_password, create_access_token, decode_access_token
+from utils.email_helper import send_otp_email
 
 app = FastAPI(title="Autonomous Incident Response API")
 
-# Database table ready karo agar exist nahi karti
 init_db()
 
-# CORS: taaki browser mein chalne wala frontend (alag port pe) is API ko
-# call kar sake. Bina isके, browser security reasons se request block kar deta.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # abhi ke liye sabko allow, production mein specific domain daalenge
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
-# Request body ka shape define karte hain - client isi format mein
-# data bhejega
+
+def get_current_user(token: str = Depends(oauth2_scheme)):
+    if token is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    payload = decode_access_token(token)
+    if payload is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return payload
+
+
+# ---------- REQUEST SCHEMAS ----------
+
 class LogRequest(BaseModel):
     raw_log: str
 
 
+class SignupRequest(BaseModel):
+    username: str
+    email: str
+    password: str
+
+
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class GoogleLoginRequest(BaseModel):
+    id_token: str
+
+
+class ForgotPasswordRequest(BaseModel):
+    username: str
+
+
+class ResetPasswordRequest(BaseModel):
+    username: str
+    otp: str
+    new_password: str
+
+
+# ---------- AUTH ENDPOINTS (username/password) ----------
+
+@app.post("/signup")
+def signup(request: SignupRequest):
+    if get_user_by_username(request.username):
+        raise HTTPException(status_code=400, detail="Username already taken")
+    if get_user_by_email(request.email):
+        raise HTTPException(status_code=400, detail="Email already registered")
+    if len(request.password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    user_id = str(uuid.uuid4())
+    password_hash = hash_password(request.password)
+    create_user(user_id, request.username, request.email, password_hash)
+
+    token = create_access_token(user_id, request.username)
+    return {"access_token": token, "token_type": "bearer", "username": request.username}
+
+
+@app.post("/login")
+def login(request: LoginRequest):
+    user = get_user_by_username(request.username)
+    if not user or not user["password_hash"] or not verify_password(request.password, user["password_hash"]):
+        raise HTTPException(status_code=401, detail="Incorrect username or password")
+
+    token = create_access_token(user["id"], user["username"])
+    return {"access_token": token, "token_type": "bearer", "username": user["username"]}
+
+
+# ---------- AUTH ENDPOINT (Google) ----------
+
+@app.post("/auth/google")
+def google_login(request: GoogleLoginRequest):
+    try:
+        idinfo = google_id_token.verify_oauth2_token(
+            request.id_token,
+            google_requests.Request(),
+            os.getenv("GOOGLE_CLIENT_ID")
+        )
+    except ValueError:
+        raise HTTPException(status_code=401, detail="Invalid Google token")
+
+    google_id = idinfo["sub"]
+    email = idinfo.get("email", "")
+    name = idinfo.get("name", email.split("@")[0] if email else "GoogleUser")
+
+    user = get_user_by_google_id(google_id)
+
+    if user is None:
+        user_id = str(uuid.uuid4())
+        create_google_user(user_id, name, email, google_id)
+        username = name
+    else:
+        user_id = user["id"]
+        username = user["username"]
+
+    token = create_access_token(user_id, username)
+    return {"access_token": token, "token_type": "bearer", "username": username}
+
+
+# ---------- FORGOT PASSWORD / OTP ----------
+
+@app.post("/forgot-password")
+def forgot_password(request: ForgotPasswordRequest):
+    user = get_user_by_username(request.username)
+    # Security: hamesha same message dete hain, chahe user exist kare ya na kare -
+    # taaki koi ye pata na kar sake ki kaunse usernames registered hain
+    if not user or not user["email"]:
+        return {"message": "If this account exists, an OTP has been sent to its registered email."}
+
+    otp = str(random.randint(100000, 999999))
+    expires_at = (datetime.now() + timedelta(minutes=10)).isoformat()
+    save_otp(request.username, otp, expires_at)
+
+    try:
+        send_otp_email(user["email"], otp)
+    except Exception as e:
+        print(f"[FORGOT PASSWORD] Email bhejne mein error: {e}")
+        raise HTTPException(status_code=500, detail="Could not send OTP email. Please try again.")
+
+    return {"message": "If this account exists, an OTP has been sent to its registered email."}
+
+
+@app.post("/reset-password")
+def reset_password(request: ResetPasswordRequest):
+    record = get_otp(request.username)
+
+    if record is None:
+        raise HTTPException(status_code=400, detail="No OTP request found. Please request a new one.")
+
+    if datetime.now() > datetime.fromisoformat(record["expires_at"]):
+        delete_otp(request.username)
+        raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
+
+    if record["otp"] != request.otp:
+        raise HTTPException(status_code=400, detail="Incorrect OTP.")
+
+    if len(request.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+
+    new_hash = hash_password(request.new_password)
+    update_user_password(request.username, new_hash)
+    delete_otp(request.username)
+
+    return {"message": "Password reset successful. You can now sign in."}
+
+
+# ---------- HEALTH CHECK ----------
+
 @app.get("/")
 def health_check():
-    """Simple endpoint check karne ke liye ki server chal raha hai"""
     return {"status": "ok", "message": "Incident Response API is running"}
 
 
+# ---------- PROTECTED ENDPOINTS ----------
+
 @app.post("/analyze")
-def analyze_incident(request: LogRequest):
-    """
-    Main endpoint - client ek log bhejta hai, hum poora LangGraph
-    pipeline chalate hain, result ko database mein save karte hain,
-    aur result wapas dete hain.
-    """
+def analyze_incident(request: LogRequest, current_user: dict = Depends(get_current_user)):
     initial_state = {
         "raw_log": request.raw_log,
         "is_anomaly": None, "anomaly_reason": None,
@@ -60,11 +207,9 @@ def analyze_incident(request: LogRequest):
 
     result = graph_app.invoke(initial_state)
 
-    # Ek unique ID banate hain iss incident ke liye, aur database mein save karte hain
     incident_id = str(uuid.uuid4())
-    save_incident(incident_id, result)
+    save_incident(incident_id, current_user["user_id"], result)
 
-    # Sirf zaroori fields wapas bhejte hain, poora internal state nahi
     return {
         "id": incident_id,
         "is_anomaly": result["is_anomaly"],
@@ -81,15 +226,13 @@ def analyze_incident(request: LogRequest):
 
 
 @app.get("/incidents")
-def list_incidents():
-    """Sab past incidents ki summary list deta hai, sabse naya pehle"""
-    return get_all_incidents()
+def list_incidents(current_user: dict = Depends(get_current_user)):
+    return get_all_incidents(current_user["user_id"])
 
 
 @app.get("/incidents/{incident_id}")
-def get_incident(incident_id: str):
-    """Ek specific incident ka poora detail deta hai, uski ID se"""
-    incident = get_incident_by_id(incident_id)
+def get_incident(incident_id: str, current_user: dict = Depends(get_current_user)):
+    incident = get_incident_by_id(incident_id, current_user["user_id"])
     if incident is None:
-        return {"error": "Incident not found"}
+        raise HTTPException(status_code=404, detail="Incident not found")
     return incident

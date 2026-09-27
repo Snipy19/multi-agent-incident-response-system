@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Sign In — Incident Response Console</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        font-family: -apple-system, 'Segoe UI', Roboto, Arial, sans-serif;
+        background: #0b0f19; color: #e2e8f0; min-height: 100vh;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .auth-box {
+        width: 380px; background: #111827; border: 1px solid #1f2937;
+        border-radius: 12px; padding: 32px;
+    }
+    .brand-row { display: flex; align-items: center; gap: 10px; margin-bottom: 28px; }
+    .brand-mark { width: 26px; height: 26px; border-radius: 6px; background: linear-gradient(135deg, #3b82f6, #1e40af); }
+    .brand-text { font-size: 14px; font-weight: 600; color: #f1f5f9; }
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 6px; color: #f8fafc; }
+    .subtitle { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+    label { font-size: 12px; font-weight: 600; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 6px; }
+    input {
+        width: 100%; padding: 11px 14px; border-radius: 7px; margin-bottom: 16px;
+        border: 1px solid #1f2937; background: #0b0f19; color: #e2e8f0; font-size: 14px;
+    }
+    input:focus { outline: none; border-color: #3b82f6; }
+    button {
+        width: 100%; padding: 11px; border-radius: 7px; border: none;
+        background: #2563eb; color: white; font-size: 14px; font-weight: 600;
+        cursor: pointer; margin-top: 4px;
+    }
+    button:hover { background: #1d4ed8; }
+    button:disabled { background: #334155; cursor: not-allowed; }
+    .toggle-row { text-align: center; margin-top: 18px; font-size: 13px; color: #64748b; }
+    .toggle-row a { color: #60a5fa; text-decoration: none; cursor: pointer; }
+    .error-msg { color: #f87171; font-size: 13px; margin-bottom: 14px; display: none; }
+    .divider { text-align: center; color: #475569; font-size: 12px; margin: 16px 0; display: flex; align-items: center; gap: 10px; }
+    .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: #1f2937; }
+    #googleSignInDiv { display: flex; justify-content: center; margin-bottom: 4px; }
+    .forgot-row { text-align: center; margin-top: 8px; font-size: 13px; }
+    .forgot-row a { color: #60a5fa; text-decoration: none; cursor: pointer; }
+</style>
+</head>
+<body>
+
+<div class="auth-box">
+    <div class="brand-row">
+        <div class="brand-mark"></div>
+        <span class="brand-text">Incident Response Console</span>
+    </div>
+
+    <h1 id="formTitle">Sign In</h1>
+    <p class="subtitle" id="formSubtitle">Access your incident history and run new analyses.</p>
+
+    <div class="error-msg" id="errorMsg"></div>
+
+    <div id="googleSignInDiv"></div>
+    <div class="divider">or</div>
+
+    <label>Username</label>
+    <input type="text" id="username" placeholder="yourusername">
+
+    <label id="emailLabel" style="display:none;">Email</label>
+    <input type="email" id="email" placeholder="you@example.com" style="display:none;">
+
+    <label>Password</label>
+    <input type="password" id="password" placeholder="••••••••">
+
+    <button id="submitBtn" onclick="submitForm()">Sign In</button>
+
+    <div class="forgot-row" id="forgotRow">
+        <a onclick="window.location.href='forgot-password.html'">Forgot Password?</a>
+    </div>
+
+    <div class="toggle-row">
+        <span id="toggleText">Don't have an account?</span>
+        <a id="toggleLink" onclick="toggleMode()">Create one</a>
+    </div>
+</div>
+
+<script>
+    const API_BASE = "http://127.0.0.1:8000";
+    const GOOGLE_CLIENT_ID = "647599107950-qdn3eek122ano8dmj1d1lpj5569v7ibc.apps.googleusercontent.com";
+    let mode = "login";
+
+    function toggleMode() {
+        mode = mode === "login" ? "signup" : "login";
+        document.getElementById("formTitle").textContent = mode === "login" ? "Sign In" : "Create Account";
+        document.getElementById("submitBtn").textContent = mode === "login" ? "Sign In" : "Sign Up";
+        document.getElementById("toggleText").textContent = mode === "login" ? "Don't have an account?" : "Already have an account?";
+        document.getElementById("toggleLink").textContent = mode === "login" ? "Create one" : "Sign in";
+        document.getElementById("errorMsg").style.display = "none";
+
+        document.getElementById("emailLabel").style.display = mode === "signup" ? "block" : "none";
+        document.getElementById("email").style.display = mode === "signup" ? "block" : "none";
+        document.getElementById("forgotRow").style.display = mode === "signup" ? "none" : "block";
+    }
+
+    async function submitForm() {
+        const username = document.getElementById("username").value.trim();
+        const password = document.getElementById("password").value;
+        const errorMsg = document.getElementById("errorMsg");
+        const btn = document.getElementById("submitBtn");
+
+        errorMsg.style.display = "none";
+
+        if (!username || !password) {
+            errorMsg.textContent = "Please fill in both fields.";
+            errorMsg.style.display = "block";
+            return;
+        }
+
+        if (mode === "signup" && !document.getElementById("email").value.trim()) {
+            errorMsg.textContent = "Please enter your email.";
+            errorMsg.style.display = "block";
+            return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Please wait...";
+
+        try {
+            const endpoint = mode === "login" ? "/login" : "/signup";
+            const bodyData = mode === "signup"
+                ? { username, email: document.getElementById("email").value.trim(), password }
+                : { username, password };
+
+            const response = await fetch(`${API_BASE}${endpoint}`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(bodyData)
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.detail || "Something went wrong");
+            }
+
+            localStorage.setItem("access_token", data.access_token);
+            localStorage.setItem("username", data.username);
+            window.location.href = "index.html";
+
+        } catch (err) {
+            errorMsg.textContent = err.message;
+            errorMsg.style.display = "block";
+        } finally {
+            btn.disabled = false;
+            btn.textContent = mode === "login" ? "Sign In" : "Sign Up";
+        }
+    }
+
+    function handleGoogleLogin(response) {
+        const errorMsg = document.getElementById("errorMsg");
+        errorMsg.style.display = "none";
+
+        fetch(`${API_BASE}/auth/google`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id_token: response.credential })
+        })
+        .then(res => res.json().then(data => ({ ok: res.ok, data })))
+        .then(({ ok, data }) => {
+            if (!ok) throw new Error(data.detail || "Google sign-in failed");
+            localStorage.setItem("access_token", data.access_token);
+            localStorage.setItem("username", data.username);
+            window.location.href = "index.html";
+        })
+        .catch(err => {
+            errorMsg.textContent = err.message;
+            errorMsg.style.display = "block";
+        });
+    }
+
+    window.onload = function() {
+        google.accounts.id.initialize({
+            client_id: GOOGLE_CLIENT_ID,
+            callback: handleGoogleLogin
+        });
+        google.accounts.id.renderButton(
+            document.getElementById("googleSignInDiv"),
+            { theme: "outline", size: "large", width: 300 }
+        );
+    };
+</script>
+</body>
+</html>

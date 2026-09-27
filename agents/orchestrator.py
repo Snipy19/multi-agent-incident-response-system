@@ -1,5 +1,14 @@
 """
 ORCHESTRATOR AGENT
+---------------------
+Kaam: Log dekh kar decide karna ki iss incident ko investigate karne ke
+liye kitne aur kaunse "angles" (aspects) chahiye.
+
+GROUNDING RULE: Angles sirf unhi cheezon pe banenge jo log mein explicitly
+mention hain ya directly implied hain - koi speculative/hypothetical angle
+nahi banega jo log mein hai hi nahi (jaise agar log sirf CPU+latency bolta
+hai, toh "Database", "Third-Party Gateway" jaisे angles nahi banenge sirf
+isliye ki "shayad involved ho sakte hain").
 """
 
 import os
@@ -34,18 +43,25 @@ Log entry:
 Anomaly reason:
 "{anomaly_reason}"
 
-Identify EVERY distinct technical angle/aspect that needs to be investigated
-to fully understand this incident. This log may describe a SIMPLE single-issue
-problem (1 angle) or a COMPLEX multi-system outage (10, 20, or more angles).
+Identify the technical angles/aspects that need to be investigated to
+understand this incident.
 
-CRITICAL RULE: Scan the log for every named service, system, or component
-mentioned (e.g. specific microservices, databases, message queues, cloud
-resources, Kubernetes, third-party vendors, security systems). EVERY named
-system with a reported problem MUST get its own angle - do not skip any of
-them, even if they seem minor. Only merge symptoms together when they belong
-to the SAME underlying system (e.g. CPU + memory + disk on the SAME host can
-be one "Resource Exhaustion" angle) - never merge across different named
-services or vendors.
+STRICT GROUNDING RULE - this is critical:
+- ONLY create an angle for a system, component, or symptom that is
+  EXPLICITLY mentioned in the log text above, OR is a direct, named
+  component of something explicitly mentioned (e.g. if the log says
+  "payment-service" and it's known to run on Kubernetes, "Kubernetes"
+  is acceptable only if the log itself implies infrastructure context -
+  otherwise stick to what is literally stated).
+- DO NOT invent speculative angles for systems that are NOT mentioned,
+  just because they "could theoretically be involved" (e.g. do not add
+  "Database", "Third-Party Gateway", "Network", "Load Balancer" unless
+  the log actually references them).
+- If the log describes only 1-2 symptoms, you should typically produce
+  only 1-3 angles. Only produce many angles (10+) when the log itself
+  actually names many distinct systems/components with reported problems.
+- When in doubt, investigate FEWER angles with higher relevance rather
+  than more angles with speculation. A short log deserves a short list.
 
 Keep each angle name SHORT (1-3 words, e.g. "Database", "TLS Certificates", "Kafka Lag").
 
@@ -65,7 +81,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     except (json.JSONDecodeError, KeyError, AttributeError) as e:
         print(f"[ORCHESTRATOR AGENT] Pehla attempt fail hua: {e}. Simpler prompt se retry kar rahe hain...")
 
-        fallback_prompt = f"""List every named service, system, or component in this incident log that has a reported problem, as a JSON array of short labels (1-3 words each). Do not skip any named system.
+        fallback_prompt = f"""List only the systems/components EXPLICITLY named in this incident log that have a reported problem, as a JSON array of short labels (1-3 words each). Do not add anything not literally mentioned.
 
 Log (first 1200 characters):
 "{raw_log[:1200]}"

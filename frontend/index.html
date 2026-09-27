@@ -20,12 +20,50 @@
     }
     .brand-name { font-size: 15px; font-weight: 600; color: #f1f5f9; letter-spacing: 0.2px; }
     .brand-sub { font-size: 12px; color: #64748b; margin-left: 8px; }
+    .topbar-right { display: flex; align-items: center; gap: 16px; }
     .status-pill {
         font-size: 12px; color: #4ade80; background: #052e16;
         padding: 4px 12px; border-radius: 20px; border: 1px solid #14532d;
     }
+    .user-chip {
+        font-size: 12.5px; color: #cbd5e1; display: flex; align-items: center; gap: 10px;
+    }
+    .logout-btn {
+        background: none; border: 1px solid #334155; color: #94a3b8;
+        padding: 5px 12px; border-radius: 6px; font-size: 12px; cursor: pointer;
+    }
+    .logout-btn:hover { background: #1f2937; color: #f87171; border-color: #7f1d1d; }
 
-    .container { max-width: 960px; margin: 0 auto; padding: 40px 32px 80px; }
+    .layout { display: grid; grid-template-columns: 300px 1fr; max-width: 1300px; margin: 0 auto; }
+
+    .sidebar {
+        border-right: 1px solid #1f2937; padding: 24px 16px; min-height: calc(100vh - 65px);
+    }
+    .sidebar-title {
+        font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase;
+        letter-spacing: 0.8px; margin-bottom: 14px; padding-left: 4px;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .refresh-btn {
+        background: none; border: none; color: #64748b; cursor: pointer;
+        font-size: 11px; padding: 2px 6px; border-radius: 4px;
+    }
+    .refresh-btn:hover { background: #1f2937; color: #93c5fd; }
+    .incident-item {
+        padding: 12px; border-radius: 8px; margin-bottom: 6px; cursor: pointer;
+        border: 1px solid transparent; transition: background 0.15s;
+    }
+    .incident-item:hover { background: #111827; border-color: #1f2937; }
+    .incident-item.active { background: #0c1e3d; border-color: #1e3a5f; }
+    .incident-time { font-size: 10.5px; color: #64748b; margin-bottom: 4px; }
+    .incident-snippet { font-size: 12px; color: #cbd5e1; line-height: 1.4; }
+    .incident-conf {
+        display: inline-block; margin-top: 6px; font-size: 10px; font-weight: 700;
+        padding: 1px 8px; border-radius: 12px;
+    }
+    .empty-sidebar { font-size: 12px; color: #475569; padding: 12px 4px; }
+
+    .main { padding: 40px 40px 80px; }
     .page-title { font-size: 22px; font-weight: 600; color: #f8fafc; margin-bottom: 4px; }
     .page-subtitle { font-size: 13.5px; color: #64748b; margin-bottom: 28px; }
 
@@ -52,6 +90,8 @@
     }
     button:hover { background: #1d4ed8; }
     button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
+    .btn-secondary { background: #1f2937; color: #cbd5e1; }
+    .btn-secondary:hover { background: #273449; }
     .loading { color: #64748b; font-size: 13px; display: none; }
     .error-msg { color: #f87171; font-size: 13px; margin-top: 12px; display: none; }
 
@@ -99,6 +139,9 @@
         display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
         color: #fbbf24; margin-top: 4px;
     }
+
+    .result-top-actions { margin-bottom: 20px; }
+    .result-bottom-actions { margin-top: 28px; }
 </style>
 </head>
 <body>
@@ -109,62 +152,200 @@
         <span class="brand-name">Incident Response Console</span>
         <span class="brand-sub">Multi-Agent Diagnostic Engine</span>
     </div>
-    <span class="status-pill">● Service Online</span>
+    <div class="topbar-right">
+        <span class="status-pill">● Service Online</span>
+        <div class="user-chip">
+            <span id="usernameDisplay"></span>
+            <button class="logout-btn" onclick="logout()">Logout</button>
+        </div>
+    </div>
 </div>
 
-<div class="container">
-    <div class="page-title">New Incident Analysis</div>
-    <div class="page-subtitle">Submit a raw log entry to run automated root-cause investigation and fix recommendation.</div>
+<div class="layout">
 
-    <div class="input-panel">
-        <label class="input-label">Log Input</label>
-        <textarea id="logInput" placeholder="e.g. CRITICAL: checkout-service reporting database timeout (30s), memory at 96%, disk I/O latency at 800ms..."></textarea>
-        <div class="action-row">
-            <button id="analyzeBtn" onclick="analyzeLog()">Run Analysis</button>
-            <span class="loading" id="loadingMsg">Agents investigating — this may take 20–60s depending on complexity...</span>
+    <div class="sidebar">
+        <div class="sidebar-title">
+            <span>Past Incidents</span>
+            <button class="refresh-btn" onclick="loadIncidentList()">Refresh</button>
         </div>
-        <div class="error-msg" id="errorMsg"></div>
+        <div id="incidentList"><div class="empty-sidebar">Loading...</div></div>
     </div>
 
-    <div class="result" id="resultBox">
+    <div class="main">
+        <div class="page-title" id="pageTitle">New Incident Analysis</div>
+        <div class="page-subtitle">Submit a raw log entry to run automated root-cause investigation and fix recommendation.</div>
 
-        <div class="section-title">Detection</div>
-        <div class="card">
-            <p id="anomalyReason"></p>
+        <div class="input-panel" id="inputPanel">
+            <label class="input-label">Log Input</label>
+            <textarea id="logInput" placeholder="e.g. CRITICAL: checkout-service reporting database timeout (30s), memory at 96%, disk I/O latency at 800ms..."></textarea>
+            <div class="action-row">
+                <button id="analyzeBtn" onclick="analyzeLog()">Run Analysis</button>
+                <button class="btn-secondary" id="newBtnTop" onclick="resetToNew()" style="display:none;">New Analysis</button>
+                <span class="loading" id="loadingMsg">Agents investigating — this may take 20–60s depending on complexity...</span>
+            </div>
+            <div class="error-msg" id="errorMsg"></div>
         </div>
 
-        <div class="section-title">Investigation <span class="agent-count" id="angleCount"></span></div>
-        <div class="card">
-            <div id="findingsList"></div>
-        </div>
+        <div class="result" id="resultBox">
 
-        <div class="section-title">Root Cause <span class="confidence-tag" id="rootConfidence"></span></div>
-        <div class="card">
-            <p id="rootCause"></p>
-        </div>
+            <div class="result-top-actions">
+                <button class="btn-secondary" onclick="resetToNew()">+ New Analysis</button>
+            </div>
 
-        <div class="section-title">
-            Recommended Fix <span class="confidence-tag" id="fixConfidence"></span>
-            <span class="review-flag" id="reviewFlag" style="display:none;">Flagged for human review</span>
-        </div>
-        <div class="card">
-            <p id="suggestedFix"></p>
-        </div>
+            <div class="section-title">Detection</div>
+            <div class="card">
+                <p id="anomalyReason"></p>
+            </div>
 
-        <div class="section-title">Full Report</div>
-        <div class="report-box" id="fullReport"></div>
+            <div class="section-title">Investigation <span class="agent-count" id="angleCount"></span></div>
+            <div class="card">
+                <div id="findingsList"></div>
+            </div>
 
+            <div class="section-title">Root Cause <span class="confidence-tag" id="rootConfidence"></span></div>
+            <div class="card">
+                <p id="rootCause"></p>
+            </div>
+
+            <div class="section-title">
+                Recommended Fix <span class="confidence-tag" id="fixConfidence"></span>
+                <span class="review-flag" id="reviewFlag" style="display:none;">Flagged for human review</span>
+            </div>
+            <div class="card">
+                <p id="suggestedFix"></p>
+            </div>
+
+            <div class="section-title">Full Report</div>
+            <div class="report-box" id="fullReport"></div>
+
+            <div class="result-bottom-actions">
+                <button onclick="resetToNew()">Start New Analysis</button>
+            </div>
+
+        </div>
     </div>
+
 </div>
 
 <script>
-    const API_URL = "http://127.0.0.1:8000/analyze";
+    const API_BASE = "http://127.0.0.1:8000";
+    let activeIncidentId = null;
+
+    // ---------- AUTH GUARD ----------
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+        window.location.href = "login.html";
+    }
+    document.getElementById("usernameDisplay").textContent = localStorage.getItem("username") || "";
+
+    function authHeaders() {
+        return { "Authorization": "Bearer " + localStorage.getItem("access_token") };
+    }
+
+    function logout() {
+        localStorage.removeItem("access_token");
+        localStorage.removeItem("username");
+        window.location.href = "login.html";
+    }
+
+    function handleAuthError(response) {
+        if (response.status === 401) {
+            logout();
+            return true;
+        }
+        return false;
+    }
+
+    // ---------- HELPERS ----------
 
     function confidenceClass(score) {
         if (score >= 0.75) return "high";
         if (score >= 0.5) return "medium";
         return "low";
     }
+
+    function formatDateTime(isoString) {
+        const d = new Date(isoString);
+        const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
+        const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+        return `${dateStr}, ${timeStr}`;
+    }
+
+    function timeAgo(isoString) {
+        const diffMs = Date.now() - new Date(isoString).getTime();
+        const mins = Math.floor(diffMs / 60000);
+        if (mins < 1) return "just now";
+        if (mins < 60) return mins + "m ago";
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return hrs + "h ago";
+        return Math.floor(hrs / 24) + "d ago";
+    }
+
+    // ---------- SIDEBAR ----------
+
+    async function loadIncidentList() {
+        const listEl = document.getElementById("incidentList");
+        try {
+            const res = await fetch(`${API_BASE}/incidents`, { headers: authHeaders() });
+            if (handleAuthError(res)) return;
+            const incidents = await res.json();
+
+            if (incidents.length === 0) {
+                listEl.innerHTML = '<div class="empty-sidebar">No incidents yet. Run your first analysis.</div>';
+                return;
+            }
+
+            listEl.innerHTML = "";
+            incidents.forEach(inc => {
+                const div = document.createElement("div");
+                div.className = "incident-item" + (inc.id === activeIncidentId ? " active" : "");
+                const snippet = inc.raw_log.length > 70 ? inc.raw_log.slice(0, 70) + "..." : inc.raw_log;
+                const conf = inc.root_cause_confidence != null ? (inc.root_cause_confidence * 100).toFixed(0) + "%" : "—";
+                const confCls = inc.root_cause_confidence != null ? confidenceClass(inc.root_cause_confidence) : "low";
+                div.innerHTML = `
+                    <div class="incident-time">${formatDateTime(inc.created_at)} · ${timeAgo(inc.created_at)}</div>
+                    <div class="incident-snippet">${snippet}</div>
+                    <span class="incident-conf confidence-tag ${confCls}">${conf}</span>
+                `;
+                div.onclick = () => loadIncidentDetail(inc.id);
+                listEl.appendChild(div);
+            });
+        } catch (err) {
+            listEl.innerHTML = '<div class="empty-sidebar">Could not load incidents.</div>';
+        }
+    }
+
+    async function loadIncidentDetail(id) {
+        activeIncidentId = id;
+        document.getElementById("pageTitle").textContent = "Past Incident";
+        document.getElementById("inputPanel").style.display = "none";
+        document.getElementById("newBtnTop").style.display = "inline-block";
+
+        try {
+            const res = await fetch(`${API_BASE}/incidents/${id}`, { headers: authHeaders() });
+            if (handleAuthError(res)) return;
+            const data = await res.json();
+            renderResult(data);
+            loadIncidentList();
+        } catch (err) {
+            document.getElementById("errorMsg").textContent = "Could not load this incident.";
+            document.getElementById("errorMsg").style.display = "block";
+        }
+    }
+
+    function resetToNew() {
+        activeIncidentId = null;
+        document.getElementById("pageTitle").textContent = "New Incident Analysis";
+        document.getElementById("inputPanel").style.display = "block";
+        document.getElementById("newBtnTop").style.display = "none";
+        document.getElementById("resultBox").style.display = "none";
+        document.getElementById("logInput").value = "";
+        document.getElementById("errorMsg").style.display = "none";
+        loadIncidentList();
+        window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    // ---------- ANALYZE ----------
 
     async function analyzeLog() {
         const logText = document.getElementById("logInput").value.trim();
@@ -186,16 +367,20 @@
         loading.style.display = "inline";
 
         try {
-            const response = await fetch(API_URL, {
+            const response = await fetch(`${API_BASE}/analyze`, {
                 method: "POST",
-                headers: { "Content-Type": "application/json" },
+                headers: { "Content-Type": "application/json", ...authHeaders() },
                 body: JSON.stringify({ raw_log: logText })
             });
 
+            if (handleAuthError(response)) return;
             if (!response.ok) throw new Error(`Server returned ${response.status}`);
 
             const data = await response.json();
+            activeIncidentId = data.id;
             renderResult(data);
+            loadIncidentList();
+            document.getElementById("newBtnTop").style.display = "inline-block";
 
         } catch (err) {
             errorMsg.textContent = "Error: " + err.message + " — confirm the backend is running on port 8000.";
@@ -208,7 +393,6 @@
 
     function renderResult(data) {
         document.getElementById("anomalyReason").textContent = data.anomaly_reason;
-
         document.getElementById("angleCount").textContent = data.investigation_angles.length + " agents spawned";
 
         const findingsList = document.getElementById("findingsList");
@@ -234,11 +418,11 @@
         fixBadge.className = "confidence-tag " + confidenceClass(data.fix_confidence);
 
         document.getElementById("reviewFlag").style.display = data.needs_human_review ? "inline-flex" : "none";
-
         document.getElementById("fullReport").textContent = data.final_report;
-
         document.getElementById("resultBox").style.display = "block";
     }
+
+    loadIncidentList();
 </script>
 </body>
 </html>
