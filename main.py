@@ -1,6 +1,6 @@
 """
-FASTAPI BACKEND (username/password + Google + Forgot Password/OTP)
------------------------------------------------------------------------
+FASTAPI BACKEND (username/password + Google + Forgot Password/OTP + report downloads)
+-----------------------------------------------------------------------------------------
 """
 
 import os
@@ -9,6 +9,7 @@ import random
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from google.oauth2 import id_token as google_id_token
@@ -23,6 +24,7 @@ from db.database import (
 )
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from utils.email_helper import send_otp_email
+from utils.report_export import build_markdown, build_text, build_pdf
 
 app = FastAPI(title="Autonomous Incident Response API")
 
@@ -143,8 +145,8 @@ def google_login(request: GoogleLoginRequest):
 @app.post("/forgot-password")
 def forgot_password(request: ForgotPasswordRequest):
     user = get_user_by_username(request.username)
-    # Security: hamesha same message dete hain, chahe user exist kare ya na kare -
-    # taaki koi ye pata na kar sake ki kaunse usernames registered hain
+    # Security: hamesha same message, chahe user exist kare ya na kare
+    # (user enumeration se bachne ke liye)
     if not user or not user["email"]:
         return {"message": "If this account exists, an OTP has been sent to its registered email."}
 
@@ -236,3 +238,34 @@ def get_incident(incident_id: str, current_user: dict = Depends(get_current_user
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found")
     return incident
+
+
+@app.get("/incidents/{incident_id}/report")
+def download_report(incident_id: str, format: str = "md", current_user: dict = Depends(get_current_user)):
+    """
+    Incident ki downloadable report deta hai: format = md | txt | pdf.
+    Report DB ke real data se on-demand banti hai (disk pe kuch save nahi hota).
+    """
+    incident = get_incident_by_id(incident_id, current_user["user_id"])
+    if incident is None:
+        raise HTTPException(status_code=404, detail="Incident not found")
+
+    short_id = incident_id[:8]
+
+    if format == "md":
+        content = build_markdown(incident).encode("utf-8")
+        media_type, ext = "text/markdown; charset=utf-8", "md"
+    elif format == "txt":
+        content = build_text(incident).encode("utf-8")
+        media_type, ext = "text/plain; charset=utf-8", "txt"
+    elif format == "pdf":
+        content = build_pdf(incident)
+        media_type, ext = "application/pdf", "pdf"
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported format. Use md, txt or pdf.")
+
+    return Response(
+        content=content,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="incident-report-{short_id}.{ext}"'}
+    )

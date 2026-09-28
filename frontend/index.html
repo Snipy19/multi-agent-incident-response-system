@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Incident Response Console</title>
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -92,6 +93,7 @@
     button:disabled { background: #334155; color: #64748b; cursor: not-allowed; }
     .btn-secondary { background: #1f2937; color: #cbd5e1; }
     .btn-secondary:hover { background: #273449; }
+    .btn-small { padding: 6px 14px; font-size: 12.5px; }
     .loading { color: #64748b; font-size: 13px; display: none; }
     .error-msg { color: #f87171; font-size: 13px; margin-top: 12px; display: none; }
 
@@ -140,7 +142,15 @@
         color: #fbbf24; margin-top: 4px;
     }
 
-    .result-top-actions { margin-bottom: 20px; }
+    .result-top-actions {
+        display: flex; justify-content: space-between; align-items: center;
+        flex-wrap: wrap; gap: 12px; margin-bottom: 8px;
+    }
+    .download-group { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .download-label {
+        font-size: 11px; font-weight: 700; color: #64748b;
+        text-transform: uppercase; letter-spacing: 0.8px; margin-right: 4px;
+    }
     .result-bottom-actions { margin-top: 28px; }
 </style>
 </head>
@@ -153,7 +163,7 @@
         <span class="brand-sub">Multi-Agent Diagnostic Engine</span>
     </div>
     <div class="topbar-right">
-        <span class="status-pill">● Service Online</span>
+        <span class="status-pill">&#9679; Service Online</span>
         <div class="user-chip">
             <span id="usernameDisplay"></span>
             <button class="logout-btn" onclick="logout()">Logout</button>
@@ -181,7 +191,7 @@
             <div class="action-row">
                 <button id="analyzeBtn" onclick="analyzeLog()">Run Analysis</button>
                 <button class="btn-secondary" id="newBtnTop" onclick="resetToNew()" style="display:none;">New Analysis</button>
-                <span class="loading" id="loadingMsg">Agents investigating — this may take 20–60s depending on complexity...</span>
+                <span class="loading" id="loadingMsg">Agents investigating &mdash; this may take 20&ndash;60s depending on complexity...</span>
             </div>
             <div class="error-msg" id="errorMsg"></div>
         </div>
@@ -190,7 +200,14 @@
 
             <div class="result-top-actions">
                 <button class="btn-secondary" onclick="resetToNew()">+ New Analysis</button>
+                <div class="download-group">
+                    <span class="download-label">Download report</span>
+                    <button class="btn-secondary btn-small" onclick="downloadReport('pdf')">PDF</button>
+                    <button class="btn-secondary btn-small" onclick="downloadReport('md')">Markdown</button>
+                    <button class="btn-secondary btn-small" onclick="downloadReport('txt')">Text</button>
+                </div>
             </div>
+            <div class="error-msg" id="downloadMsg"></div>
 
             <div class="section-title">Detection</div>
             <div class="card">
@@ -300,10 +317,10 @@
                 const div = document.createElement("div");
                 div.className = "incident-item" + (inc.id === activeIncidentId ? " active" : "");
                 const snippet = inc.raw_log.length > 70 ? inc.raw_log.slice(0, 70) + "..." : inc.raw_log;
-                const conf = inc.root_cause_confidence != null ? (inc.root_cause_confidence * 100).toFixed(0) + "%" : "—";
+                const conf = inc.root_cause_confidence != null ? (inc.root_cause_confidence * 100).toFixed(0) + "%" : "-";
                 const confCls = inc.root_cause_confidence != null ? confidenceClass(inc.root_cause_confidence) : "low";
                 div.innerHTML = `
-                    <div class="incident-time">${formatDateTime(inc.created_at)} · ${timeAgo(inc.created_at)}</div>
+                    <div class="incident-time">${formatDateTime(inc.created_at)} &middot; ${timeAgo(inc.created_at)}</div>
                     <div class="incident-snippet">${snippet}</div>
                     <span class="incident-conf confidence-tag ${confCls}">${conf}</span>
                 `;
@@ -341,6 +358,7 @@
         document.getElementById("resultBox").style.display = "none";
         document.getElementById("logInput").value = "";
         document.getElementById("errorMsg").style.display = "none";
+        document.getElementById("downloadMsg").style.display = "none";
         loadIncidentList();
         window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -383,11 +401,46 @@
             document.getElementById("newBtnTop").style.display = "inline-block";
 
         } catch (err) {
-            errorMsg.textContent = "Error: " + err.message + " — confirm the backend is running on port 8000.";
+            errorMsg.textContent = "Error: " + err.message + " - confirm the backend is running on port 8000.";
             errorMsg.style.display = "block";
         } finally {
             btn.disabled = false;
             loading.style.display = "none";
+        }
+    }
+
+    // ---------- DOWNLOAD REPORT ----------
+
+    async function downloadReport(fmt) {
+        const msg = document.getElementById("downloadMsg");
+        msg.style.display = "none";
+
+        if (!activeIncidentId) {
+            msg.textContent = "Open or run an incident first.";
+            msg.style.display = "block";
+            return;
+        }
+
+        try {
+            // Token header bhejna hai, isliye simple link nahi, fetch + blob use karte hain
+            const res = await fetch(`${API_BASE}/incidents/${activeIncidentId}/report?format=${fmt}`, {
+                headers: authHeaders()
+            });
+            if (handleAuthError(res)) return;
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `incident-report-${activeIncidentId.slice(0, 8)}.${fmt}`;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(url);
+        } catch (err) {
+            msg.textContent = "Could not download report: " + err.message;
+            msg.style.display = "block";
         }
     }
 
@@ -419,6 +472,7 @@
 
         document.getElementById("reviewFlag").style.display = data.needs_human_review ? "inline-flex" : "none";
         document.getElementById("fullReport").textContent = data.final_report;
+        document.getElementById("downloadMsg").style.display = "none";
         document.getElementById("resultBox").style.display = "block";
     }
 

@@ -1,11 +1,11 @@
 """
 DOCUMENTATION WRITER AGENT
 -----------------------------
-Kaam: Pura incident (kya hua, kyun hua, kaise fix hua) ek clean,
-professional post-mortem report mein likhna.
+Kaam: Incident ka short narrative summary likhna (UI mein "Full Report" mein dikhta hai).
 
-Report ab disk pe .txt file mein save nahi hota - final_report state
-mein jaata hai aur main.py usko database mein store karta hai.
+Report disk pe save nahi hota - final_report state mein jaata hai aur
+main.py usko database mein store karta hai. Downloadable PDF/MD/TXT
+report_export.py se banta hai (real data se).
 """
 
 import os
@@ -45,6 +45,14 @@ Write a clean, professional incident report with these sections:
 2. Root Cause
 3. Recommended Fix
 4. Confidence & Review Status
+
+STRICT RULES:
+- Use ONLY the facts provided above. Do NOT invent incident IDs, dates, times,
+  durations, customer impact numbers, team names, or people.
+- The fix is a RECOMMENDATION only. Do NOT say it was applied, that the incident
+  was resolved, or that any action has already been taken.
+- If a detail is not provided, leave it out instead of guessing.
+- Do NOT add a "prepared by" line.
 
 Keep it concise but professional, as if it will be read by an engineering team."""
 
