@@ -1,10 +1,14 @@
 """
 DOCUMENTATION WRITER AGENT
+-----------------------------
+Kaam: Pura incident (kya hua, kyun hua, kaise fix hua) ek clean,
+professional post-mortem report mein likhna.
+
+Report ab disk pe .txt file mein save nahi hota - final_report state
+mein jaata hai aur main.py usko database mein store karta hai.
 """
 
 import os
-import json
-from datetime import datetime
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
@@ -45,17 +49,8 @@ Write a clean, professional incident report with these sections:
 Keep it concise but professional, as if it will be read by an engineering team."""
 
     response = invoke_with_retry(llm, prompt)
-    report_text = response.content.strip()
+    state["final_report"] = response.content.strip()
 
-    state["final_report"] = report_text
-
-    os.makedirs("reports", exist_ok=True)
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filepath = f"reports/incident_{timestamp}.txt"
-
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(report_text)
-
-    print(f"[DOCUMENTATION WRITER AGENT] Report ban gaya aur save hua: {filepath}")
+    print("[DOCUMENTATION WRITER AGENT] Report ready (database mein save hoga)")
 
     return {k: v for k, v in state.items() if k != "investigation_findings"}
