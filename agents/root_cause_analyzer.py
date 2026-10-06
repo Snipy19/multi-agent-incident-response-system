@@ -1,13 +1,11 @@
 """
 ROOT CAUSE ANALYZER AGENT
 ---------------------------
-Kaam: Agar Log Monitor ne bola "haan ye anomaly hai", toh ye agent
-LLM se pucchega "iska asli root cause kya ho sakta hai" aur kitna
-confident hai LLM apne jawab pe (0.0 se 1.0 ke beech).
+Purpose: ask the LLM for the most likely root cause and a confidence estimate
+after the log monitor identifies an anomaly.
 
-Confidence score important hai kyunki humein baad mein decide karna hai
-ki human review chahiye ya nahi - agar LLM khud confident nahi hai,
-toh blindly aage fix suggest karna risky hai.
+The confidence score supports human-review decisions. Low-confidence
+diagnoses must not be used to recommend remediation without review.
 """
 
 import os
@@ -26,7 +24,7 @@ llm = ChatGroq(
 
 
 def root_cause_analyzer_agent(state: IncidentState) -> IncidentState:
-    print("\n[ROOT CAUSE ANALYZER AGENT] Root cause dhoond rahe hain...")
+    print("\n[ROOT CAUSE ANALYZER AGENT] Determining the root cause...")
 
     raw_log = state["raw_log"]
     anomaly_reason = state["anomaly_reason"]
@@ -60,7 +58,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         state["root_cause_confidence"] = float(parsed["confidence"])
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"[ROOT CAUSE ANALYZER AGENT] JSON parse error: {e}")
-        state["root_cause"] = "Root cause determine nahi ho paya - LLM output parse fail hua"
+        state["root_cause"] = "The root cause could not be determined because the LLM response could not be parsed."
         state["root_cause_confidence"] = 0.0
 
     print(f"[ROOT CAUSE ANALYZER AGENT] Root cause: {state['root_cause']} (confidence: {state['root_cause_confidence']})")

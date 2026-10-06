@@ -1,7 +1,7 @@
 """
 EMAIL HELPER
 --------------
-Kaam: Gmail SMTP ke through real emails bhejna - password reset OTP ke liye.
+Send password-reset OTP emails through Gmail SMTP.
 """
 
 import os
@@ -37,4 +37,4 @@ Incident Response Console
         server.login(EMAIL_ADDRESS, EMAIL_APP_PASSWORD)
         server.send_message(msg)
 
-    print(f"[EMAIL] OTP bheja gaya {to_email} ko")
+    print(f"[EMAIL] OTP sent to {to_email}")

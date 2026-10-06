@@ -1,7 +1,7 @@
 """
-Ye file prove karti hai ki Orchestrator genuinely DYNAMIC hai -
-alag complexity ke logs alag number of investigators spawn karte hain.
-Teeno log examples REAL/realistic hain, hardcoded ek jaisa nahi.
+This script demonstrates that the orchestrator scales dynamically:
+logs with different complexity levels produce different investigator counts.
+The examples represent distinct realistic incident complexities.
 """
 
 from graph import app

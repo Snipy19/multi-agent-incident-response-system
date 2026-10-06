@@ -1,7 +1,7 @@
 """
 AUTH HELPER
 --------------
-Password hashing (bcrypt) aur JWT token banane/verify karne ka logic.
+Password hashing with bcrypt and JWT token creation/verification.
 """
 
 import os
@@ -9,8 +9,7 @@ from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 
-# Secret key - production mein isko .env se lena chahiye, abhi ke liye
-# hardcoded hai development ke liye. AWS deploy karte waqt .env mein daalenge.
+# The secret should be provided through the environment in production.
 SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production-abc123xyz")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
@@ -33,7 +32,7 @@ def create_access_token(user_id: str, username: str) -> str:
 
 
 def decode_access_token(token: str):
-    """Token ko verify karta hai, return karta hai user_id ya None agar invalid/expired hai"""
+    """Verify a token and return user information, or None if invalid or expired."""
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         return {"user_id": payload["sub"], "username": payload["username"]}

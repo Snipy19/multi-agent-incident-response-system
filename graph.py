@@ -11,30 +11,29 @@ from agents.report_writer import report_writer_agent
 
 def route_after_log_monitor(state: IncidentState) -> str:
     if state["is_anomaly"]:
-        print("[ROUTER] Anomaly mili, Orchestrator ki taraf ja rahe hain")
+        print("[ROUTER] Anomaly detected; routing to the orchestrator")
         return "continue"
     else:
-        print("[ROUTER] Anomaly nahi mili, seedha khatam kar rahe hain")
+        print("[ROUTER] No anomaly detected; ending the workflow")
         return "stop"
 
 
 def spawn_investigators(state: IncidentState):
     """
-    YE HAI DYNAMIC SPAWNING WALA CORE FUNCTION.
+    Core function for dynamic investigator spawning.
 
-    Orchestrator ne 'investigation_angles' mein ek list decide ki thi
-    (jaise ["Database", "Memory", "Disk I/O"] - lambai dynamic hai).
+    The orchestrator selects a dynamic list of investigation angles
+    (for example, ["Database", "Memory", "Disk I/O"]).
 
-    Ye function har angle ke liye ek Send() object banata hai.
-    Send("investigator", {...}) ka matlab: "investigator node ko
-    isi chhote dictionary ke saath ek baar chalao".
+    This function creates one Send() object for each angle.
+    Send("investigator", {...}) runs the investigator node once
+    with the supplied input dictionary.
 
-    Agar list mein 1 angle hai -> 1 Send -> investigator 1 baar chalega
-    Agar list mein 20 angles hain -> 20 Sends -> investigator 20 baar
-    parallel chalega. YEHI HAI TERA "DYNAMIC AGENTS" WALA FEATURE.
+    One angle creates one investigator execution; 20 angles create
+    20 investigator executions that can run in parallel.
     """
     angles = state["investigation_angles"]
-    print(f"[SPAWNER] {len(angles)} Investigator(s) spawn kar rahe hain: {angles}")
+    print(f"[SPAWNER] Spawning {len(angles)} investigator(s): {angles}")
 
     return [
         Send("investigator", {"angle": angle, "raw_log": state["raw_log"]})
@@ -53,7 +52,7 @@ graph.add_node("report_writer", report_writer_agent)
 
 graph.set_entry_point("log_monitor")
 
-# Log Monitor ke baad: anomaly hai toh Orchestrator, nahi toh END
+# After the log monitor: continue to the orchestrator or end the workflow.
 graph.add_conditional_edges(
     "log_monitor",
     route_after_log_monitor,
@@ -63,18 +62,15 @@ graph.add_conditional_edges(
     }
 )
 
-# Orchestrator ke baad: spawn_investigators function decide karta hai
-# KITNE Investigator nodes parallel chalenge - ye bhi conditional edge hai,
-# but normal wale se alag hai kyunki ye ek FIXED node naam nahi, balki
-# Send() objects ki LIST return karta hai
+# The orchestrator dynamically decides how many investigator nodes run.
+# This conditional edge returns Send objects rather than a fixed node.
 graph.add_conditional_edges(
     "orchestrator",
     spawn_investigators,
-    ["investigator"]  # bata rahe hain ki spawn sirf "investigator" node ke liye hoga
+    ["investigator"]  # Send objects target the investigator node.
 )
 
-# Saare parallel Investigators khatam hone ke baad (LangGraph khud wait
-# karta hai sabke complete hone tak), Aggregator chalega
+# LangGraph waits for all parallel investigators before running the aggregator.
 graph.add_edge("investigator", "aggregator")
 
 graph.add_edge("aggregator", "fix_suggester")

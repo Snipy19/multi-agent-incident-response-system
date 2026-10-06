@@ -1,6 +1,5 @@
 """
-Ye file sirf ek kaam karti hai: hamara "State" define karna.
-State = ek shared dictionary jo har agent (node) ke beech pass hoti hai.
+This file defines the shared state passed between workflow nodes.
 """
 
 from typing import TypedDict, Optional, List, Annotated
@@ -8,9 +7,9 @@ import operator
 
 
 class InvestigationFinding(TypedDict):
-    """Ek Investigator Agent ka output - ek particular 'angle' ka analysis"""
-    angle: str              # jaise "Database", "Memory", "Network"
-    finding: str             # us angle se kya pata chala
+    """Output from one investigator for a specific technical angle."""
+    angle: str              # For example: Database, Memory, or Network.
+    finding: str             # Evidence discovered for this angle.
     confidence: float
 
 
@@ -20,16 +19,14 @@ class IncidentState(TypedDict):
     is_anomaly: Optional[bool]
     anomaly_reason: Optional[str]
 
-    # Orchestrator ye fill karega - kitne aur kaunse angles investigate karne hain
+    # The orchestrator selects the number and names of investigation angles.
     investigation_angles: Optional[List[str]]
 
-    # Investigators (parallel mein chalte hain) apna apna finding yaha add karenge.
-    # 'Annotated[List[...], operator.add]' ka matlab: jab multiple parallel nodes
-    # isi field mein likhenge, unke results APPEND honge (list mein jud jaayenge),
-    # ek doosre ko overwrite nahi karenge. Ye LangGraph ka "reducer" concept hai.
+    # Parallel investigators append their findings through operator.add.
+    # This LangGraph reducer prevents one investigator from overwriting another.
     investigation_findings: Annotated[List[InvestigationFinding], operator.add]
 
-    # Aggregator ye fill karega - sab findings ka combined summary
+    # The aggregator fills the combined root-cause summary.
     root_cause: Optional[str]
     root_cause_confidence: Optional[float]
 

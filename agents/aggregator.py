@@ -22,7 +22,7 @@ llm = ChatGroq(
 
 
 def aggregator_agent(state: IncidentState) -> IncidentState:
-    print("\n[AGGREGATOR AGENT] Sab findings combine kar rahe hain...")
+    print("\n[AGGREGATOR AGENT] Combining investigator findings...")
 
     findings = state["investigation_findings"]
 
@@ -30,7 +30,7 @@ def aggregator_agent(state: IncidentState) -> IncidentState:
         [f"- [{f['angle']}] {f['finding']} (confidence: {f['confidence']})" for f in findings]
     )
 
-    print(f"[AGGREGATOR AGENT] Total {len(findings)} findings mile:\n{findings_text}")
+    print(f"[AGGREGATOR AGENT] Received {len(findings)} findings:\n{findings_text}")
 
     similar_patterns = retrieve_similar_patterns(state["raw_log"], top_k=3)
     rag_context = "\n".join(
@@ -79,7 +79,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         state["root_cause_confidence"] = float(parsed["confidence"])
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"[AGGREGATOR AGENT] JSON parse error: {e}")
-        state["root_cause"] = "Aggregation fail hua"
+        state["root_cause"] = "Root-cause aggregation failed because the LLM response could not be parsed."
         state["root_cause_confidence"] = 0.0
 
     print(f"[AGGREGATOR AGENT] Final root cause: {state['root_cause']} (confidence: {state['root_cause_confidence']})")

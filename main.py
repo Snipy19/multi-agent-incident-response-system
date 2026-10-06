@@ -151,8 +151,8 @@ def google_login(request: GoogleLoginRequest):
 @app.post("/forgot-password")
 def forgot_password(request: ForgotPasswordRequest):
     user = get_user_by_username(request.username)
-    # Security: hamesha same message, chahe user exist kare ya na kare
-    # (user enumeration se bachne ke liye)
+    # Use the same response whether or not the user exists to prevent
+    # account enumeration.
     if not user or not user["email"]:
         return {"message": "If this account exists, an OTP has been sent to its registered email."}
 
@@ -163,7 +163,7 @@ def forgot_password(request: ForgotPasswordRequest):
     try:
         send_otp_email(user["email"], otp)
     except Exception as e:
-        print(f"[FORGOT PASSWORD] Email bhejne mein error: {e}")
+        print(f"[FORGOT PASSWORD] Failed to send email: {e}")
         raise HTTPException(status_code=500, detail="Could not send OTP email. Please try again.")
 
     return {"message": "If this account exists, an OTP has been sent to its registered email."}
@@ -249,8 +249,8 @@ def get_incident(incident_id: str, current_user: dict = Depends(get_current_user
 @app.get("/incidents/{incident_id}/report")
 def download_report(incident_id: str, format: str = "md", current_user: dict = Depends(get_current_user)):
     """
-    Incident ki downloadable report deta hai: format = md | txt | pdf.
-    Report DB ke real data se on-demand banti hai (disk pe kuch save nahi hota).
+    Return a downloadable report in md, txt, or pdf format.
+    The report is generated on demand from database data and is not written to disk.
     """
     incident = get_incident_by_id(incident_id, current_user["user_id"])
     if incident is None:

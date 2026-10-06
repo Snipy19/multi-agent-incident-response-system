@@ -25,7 +25,7 @@ def investigator_agent(state: dict) -> dict:
     angle = state["angle"]
     raw_log = state["raw_log"]
 
-    print(f"\n[INVESTIGATOR - {angle}] Investigation shuru...")
+    print(f"\n[INVESTIGATOR - {angle}] Starting investigation...")
 
     angle_specific_query = f"{angle}: {raw_log}"
     similar_patterns = retrieve_similar_patterns(angle_specific_query, top_k=3)
@@ -38,7 +38,7 @@ def investigator_agent(state: dict) -> dict:
         ]
     )
 
-    print(f"[INVESTIGATOR - {angle}] RAG context mila:\n{context_text}")
+    print(f"[INVESTIGATOR - {angle}] Retrieved RAG context:\n{context_text}")
 
     prompt = f"""You are a DevOps specialist focused specifically on the "{angle}" aspect of a system.
 
@@ -80,7 +80,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         print(f"[INVESTIGATOR - {angle}] JSON parse error: {e}")
         finding: InvestigationFinding = {
             "angle": angle,
-            "finding": f"{angle} analysis fail hua - parse error",
+            "finding": f"{angle} analysis failed because the LLM response could not be parsed.",
             "confidence": 0.0
         }
 

@@ -1,12 +1,11 @@
 """
 RETRIEVER
 -----------
-Kaam: Naya log aane par, saved FAISS index (multi-dataset knowledge base)
-mein se sabse SIMILAR purane real-world patterns dhoondhna (top-k).
+Purpose: retrieve the most similar historical patterns from the saved
+multi-dataset FAISS knowledge base.
 
-Ye function Investigator agents ke andar call hota hai - jitne bhi
-Investigators dynamically spawn hon (1 ho, 5 ho, 100 ho), har ek apna
-alag RAG search independently karta hai apne angle ke context mein.
+The investigator calls this function independently for each investigation
+angle, regardless of whether one or many investigators are spawned.
 """
 
 import faiss
@@ -14,9 +13,8 @@ import pickle
 import numpy as np
 from sentence_transformers import SentenceTransformer
 
-# Model aur index sirf EK BAAR load karte hain (module load hote waqt),
-# taaki baar baar disk se na padhna pade - performance ke liye important
-print("[RETRIEVER] Index aur model load kar rahe hain...")
+# Load the model and index once at module import for efficient reuse.
+print("[RETRIEVER] Loading the index and embedding model...")
 _model = SentenceTransformer("all-MiniLM-L6-v2")
 _index = faiss.read_index("vectorstore/hdfs_index.faiss")
 
@@ -28,11 +26,10 @@ print(f"[RETRIEVER] Ready - {_index.ntotal} patterns loaded")
 
 def retrieve_similar_patterns(query_log: str, top_k: int = 3) -> list[dict]:
     """
-    query_log: naya incoming log jo hum check karna chahte hain
-    top_k: kitne sabse similar patterns chahiye
+    query_log: incoming log to search
+    top_k: number of similar patterns to return
 
-    Return: list of dicts, har ek mein 'template', 'level', 'component',
-    'dataset', 'distance' (kam distance = zyada similar)
+    Return dictionaries containing template, context metadata, and distance.
     """
     query_embedding = _model.encode([query_log])
 

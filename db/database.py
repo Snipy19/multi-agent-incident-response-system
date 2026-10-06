@@ -1,8 +1,7 @@
 """
 DATABASE LAYER
 ------------------
-Kaam: Users (password-based aur Google-based), incidents, aur
-password-reset OTPs ko SQLite mein store karna.
+SQLite persistence for password/Google users, incidents, and password-reset OTPs.
 """
 
 import sqlite3
@@ -62,7 +61,7 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         """)
-    print("[DATABASE] Tables ready hain (users, incidents, password_reset_otps)")
+    print("[DATABASE] Tables are ready: users, incidents, password_reset_otps")
 
 
 # ---------- USER FUNCTIONS (password-based) ----------
@@ -168,7 +167,7 @@ def save_incident(incident_id: str, user_id: str, result: dict):
             int(result["needs_human_review"]) if result["needs_human_review"] is not None else None,
             result["final_report"]
         ))
-    print(f"[DATABASE] Incident {incident_id} save ho gaya user {user_id} ke liye")
+    print(f"[DATABASE] Saved incident {incident_id} for user {user_id}")
 
 
 def get_all_incidents(user_id: str, limit: int = 50):

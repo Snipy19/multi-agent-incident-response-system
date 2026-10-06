@@ -1,13 +1,12 @@
 """
 REPORT EXPORT
 ----------------
-Kaam: Database mein saved incident se downloadable report banana
-(PDF, Markdown, ya plain text).
+Purpose: generate downloadable PDF, Markdown, and plain-text reports
+from a stored incident.
 
-Report LLM ke likhe narrative se nahi, incident ke REAL structured data
-se banti hai (asli timestamp, findings, confidence). Koi cheez invent
-nahi hoti - jo data system ke paas nahi hai (severity, MTTR, impact),
-wo report mein hai hi nahi.
+Reports are built from the incident's structured data rather than invented
+narrative. Missing fields such as severity, MTTR, and business impact are
+not fabricated.
 """
 
 import io
@@ -67,7 +66,7 @@ def _clean_incident(incident):
     return cleaned
 
 
-# ---------- COMMON HELPERS (teeno formats yahi use karte hain) ----------
+# ---------- COMMON HELPERS (shared by all three formats) ----------
 
 def _pct(value):
     return f"{value * 100:.0f}%" if value is not None else "N/A"
@@ -119,7 +118,7 @@ def _review_short(flag):
 
 
 def _executive_summary(incident):
-    """Real data se templated summary - koi invented detail nahi"""
+    """Build a templated summary from real data without inventing details."""
     if not incident.get("is_anomaly"):
         return ("Automated analysis of the submitted log did not detect an anomaly. "
                 "No further investigation was performed.")
@@ -164,7 +163,7 @@ _ABBREV_END = re.compile(r"(?:e\.g|i\.e|etc|vs|approx|incl)\.$", re.IGNORECASE)
 
 
 def _split_actions(text):
-    """Fix ke text ko numbered steps mein todta hai (sirf sentence/semicolon boundaries pe)"""
+    """Split remediation text into numbered steps at sentence/semicolon boundaries."""
     text = (text or "").strip()
     if not text:
         return []
@@ -302,9 +301,8 @@ def build_text(incident: dict) -> str:
 
 # ---------- PDF ----------
 
-# ReportLab ke standard fonts Latin-1 jaise characters support karte hain.
-# LLM output mein kabhi kabhi special characters aate hain, unko safe
-# equivalents se replace karte hain warna PDF mein black boxes dikhte hain.
+# ReportLab's standard fonts have limited character support. Normalize special
+# characters to safe equivalents to prevent missing glyphs in generated PDFs.
 _REPLACEMENTS = {
     "\u2010": "-", "\u2011": "-", "\u2012": "-", "\u2212": "-",
     "\u2248": "~", "\u2192": "->", "\u2190": "<-",
@@ -321,12 +319,12 @@ def _pdf_safe(text) -> str:
 
 
 def _p(text) -> str:
-    """Paragraph ke liye text: safe characters + XML escape + line breaks"""
+    """Prepare safe, XML-escaped paragraph text with line breaks."""
     return escape(_pdf_safe(text)).replace("\n", "<br/>")
 
 
 def _soft_wrap(text, n=70):
-    """Bahut lambe bina-space wale tokens ko wrap karne ke liye (sirf PDF display)"""
+    """Soft-wrap very long unspaced tokens for PDF display."""
     return re.sub(r"(\S{%d})(?=\S)" % n, r"\1 ", text)
 
 
@@ -364,7 +362,7 @@ class ConfidenceBar(Flowable):
 
 
 def _make_canvas(short_id):
-    """Har page pe header/footer aur 'Page X of Y' ke liye custom canvas"""
+    """Custom canvas that adds headers, footers, and Page X of Y."""
 
     class _NumberedCanvas(canvas.Canvas):
         def __init__(self, *args, **kwargs):
@@ -412,7 +410,7 @@ def _make_canvas(short_id):
 
 
 def _section(title, style):
-    """Section heading (neeche line ke saath). keepWithNext se heading akeli page ke end pe nahi rehti"""
+    """Section heading with a rule; keepWithNext prevents orphaned headings."""
     t = Table([[Paragraph(_p(title), style)]], colWidths=[17 * cm])
     t.setStyle(TableStyle([
         ("LINEBELOW", (0, 0), (-1, -1), 0.8, RULE),

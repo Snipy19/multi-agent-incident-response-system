@@ -23,7 +23,7 @@ CONFIDENCE_THRESHOLD = 0.5
 
 
 def fix_suggester_agent(state: IncidentState) -> IncidentState:
-    print("\n[FIX SUGGESTER AGENT] Fix suggest karne ka soch rahe hain...")
+    print("\n[FIX SUGGESTER AGENT] Preparing a remediation recommendation...")
 
     root_cause_confidence = state["root_cause_confidence"]
 
@@ -35,8 +35,8 @@ def fix_suggester_agent(state: IncidentState) -> IncidentState:
     requires_human_review = angle_count >= 10 or is_critical_log
 
     if root_cause_confidence < CONFIDENCE_THRESHOLD:
-        print(f"[FIX SUGGESTER AGENT] Confidence bahut low hai ({root_cause_confidence}), human review chahiye")
-        state["suggested_fix"] = "Confidence bahut low thi, isliye fix suggest nahi kiya gaya"
+        print(f"[FIX SUGGESTER AGENT] Confidence is too low ({root_cause_confidence}); human review is required")
+        state["suggested_fix"] = "No remediation was recommended because confidence was too low."
         state["fix_confidence"] = 0.0
         state["needs_human_review"] = True
         return {k: v for k, v in state.items() if k != "investigation_findings"}
@@ -78,7 +78,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"[FIX SUGGESTER AGENT] JSON parse error: {e}")
-        state["suggested_fix"] = "Fix suggest nahi ho paya - LLM output parse fail hua"
+        state["suggested_fix"] = "A remediation recommendation could not be generated because the LLM response could not be parsed."
         state["fix_confidence"] = 0.0
         state["needs_human_review"] = True
 

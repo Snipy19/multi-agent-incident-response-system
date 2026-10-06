@@ -21,7 +21,7 @@ llm = ChatGroq(
 
 
 def log_monitor_agent(state: IncidentState) -> IncidentState:
-    print("\n[LOG MONITOR AGENT] LLM ko log bhej rahe hain...")
+    print("\n[LOG MONITOR AGENT] Sending the log to the LLM...")
 
     raw_log = state["raw_log"]
 
@@ -46,9 +46,9 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         state["is_anomaly"] = parsed["is_anomaly"]
         state["anomaly_reason"] = parsed["reason"]
     except (json.JSONDecodeError, KeyError) as e:
-        print(f"[LOG MONITOR AGENT] JSON parse karne mein error: {e}")
+        print(f"[LOG MONITOR AGENT] JSON parsing failed: {e}")
         state["is_anomaly"] = True
-        state["anomaly_reason"] = "LLM output parse nahi ho paya, safety ke liye anomaly maan liya"
+        state["anomaly_reason"] = "The LLM response could not be parsed; classified as an anomaly for safety."
 
     print(f"[LOG MONITOR AGENT] Final decision -> is_anomaly: {state['is_anomaly']}, reason: {state['anomaly_reason']}")
 
