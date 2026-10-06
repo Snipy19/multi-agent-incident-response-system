@@ -43,6 +43,9 @@ def retrieve_similar_patterns(query_log: str, top_k: int = 3) -> list[dict]:
         row = _metadata.iloc[idx]
         results.append({
             "template": row["EventTemplate"],
+            "sample_content": row.get("SampleContent", row["EventTemplate"]),
+            "example_count": int(row.get("ExampleCount", 1)),
+            "label": row.get("Label", "Unknown"),
             "level": row["Level"],
             "component": row["Component"],
             "dataset": row["Dataset"],

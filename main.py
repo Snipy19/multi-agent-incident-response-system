@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
+from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel
 from google.oauth2 import id_token as google_id_token
@@ -36,6 +37,11 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Serve the frontend from the same origin as the API in local and container
+# deployments. This keeps Google OAuth on the configured localhost origin and
+# avoids frontend/API port mismatches during development.
+app.mount("/ui", StaticFiles(directory="frontend", html=True), name="frontend")
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 

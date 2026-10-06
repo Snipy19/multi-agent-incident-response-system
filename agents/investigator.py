@@ -30,7 +30,12 @@ def investigator_agent(state: dict) -> dict:
     angle_specific_query = f"{angle}: {raw_log}"
     similar_patterns = retrieve_similar_patterns(angle_specific_query, top_k=3)
     context_text = "\n".join(
-        [f"- [{p['dataset']}/{p['level']}] {p['template']}" for p in similar_patterns]
+        [
+            f"- [{p['dataset']}/{p['level']}/{p.get('label', 'Unknown')}] "
+            f"{p['template']} | component={p['component']} | "
+            f"examples={p.get('example_count', 1)} | sample={p.get('sample_content', '')}"
+            for p in similar_patterns
+        ]
     )
 
     print(f"[INVESTIGATOR - {angle}] RAG context mila:\n{context_text}")
@@ -44,6 +49,14 @@ Here are similar log patterns observed in real production systems in the past (f
 {context_text}
 
 Analyze this log ONLY from the "{angle}" perspective. Use the reference patterns above if relevant to inform your analysis, but base your finding primarily on the actual log entry. What does this log tell us about potential {angle}-related issues?
+
+Confidence rubric:
+- 0.90-1.00: directly supported by an explicit error and strong corroborating evidence
+- 0.75-0.89: strongly supported, but at least one important detail is inferred
+- 0.50-0.74: plausible explanation with meaningful uncertainty
+- below 0.50: weak or speculative evidence
+Do not default to a familiar rounded value such as 0.85 or 0.92. Choose the score
+that matches the evidence and use two decimal places.
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{

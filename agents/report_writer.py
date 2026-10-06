@@ -13,6 +13,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
 from utils.llm_helper import invoke_with_retry
+from utils.report_export import _clean_text
 
 load_dotenv()
 
@@ -57,7 +58,7 @@ STRICT RULES:
 Keep it concise but professional, as if it will be read by an engineering team."""
 
     response = invoke_with_retry(llm, prompt)
-    state["final_report"] = response.content.strip()
+    state["final_report"] = _clean_text(response.content.strip())
 
     print("[DOCUMENTATION WRITER AGENT] Report ready (database mein save hoga)")
 

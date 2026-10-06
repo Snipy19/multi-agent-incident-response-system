@@ -34,7 +34,12 @@ def aggregator_agent(state: IncidentState) -> IncidentState:
 
     similar_patterns = retrieve_similar_patterns(state["raw_log"], top_k=3)
     rag_context = "\n".join(
-        [f"- [{p['dataset']}/{p['level']}] {p['template']}" for p in similar_patterns]
+        [
+            f"- [{p['dataset']}/{p['level']}/{p.get('label', 'Unknown')}] "
+            f"{p['template']} | component={p['component']} | "
+            f"examples={p.get('example_count', 1)} | sample={p.get('sample_content', '')}"
+            for p in similar_patterns
+        ]
     )
 
     prompt = f"""You are a senior DevOps engineer synthesizing an incident investigation.
@@ -48,6 +53,14 @@ Similar patterns observed in real production systems in the past (for reference 
 
 Synthesize these findings into ONE unified root cause explanation. Identify
 which finding(s) are most likely the PRIMARY cause versus contributing/secondary factors.
+
+Confidence rubric:
+- 0.90-1.00: the primary cause is directly supported by multiple independent findings
+- 0.75-0.89: strongly supported, but important confirmation is still missing
+- 0.50-0.74: plausible competing explanations remain
+- below 0.50: insufficient evidence for a reliable root cause
+Do not default to 0.85, 0.90, 0.92, or 0.93. Use two decimal places and reflect
+the uncertainty caused by missing metrics, traces, configuration, and live validation.
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{

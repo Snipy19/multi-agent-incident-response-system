@@ -136,6 +136,9 @@
         white-space: pre-wrap; font-size: 13px; line-height: 1.75; color: #b8c2cf;
         font-family: 'SF Mono', Consolas, monospace;
     }
+    .report-note {
+        margin-top: 10px; color: #64748b; font-size: 11px; line-height: 1.5;
+    }
 
     .review-flag {
         display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
@@ -234,6 +237,7 @@
 
             <div class="section-title">Full Report</div>
             <div class="report-box" id="fullReport"></div>
+            <div class="report-note">Confidence values are model estimates based on the submitted log and retrieved patterns—not calibrated probabilities. Validate recommendations before making production changes.</div>
 
             <div class="result-bottom-actions">
                 <button onclick="resetToNew()">Start New Analysis</button>
@@ -245,7 +249,9 @@
 </div>
 
 <script>
-    const API_BASE = "http://127.0.0.1:8000";
+    const API_BASE = window.location.port === "8000"
+        ? window.location.origin
+        : "http://127.0.0.1:8000";
     let activeIncidentId = null;
 
     // ---------- AUTH GUARD ----------
@@ -257,6 +263,21 @@
 
     function authHeaders() {
         return { "Authorization": "Bearer " + localStorage.getItem("access_token") };
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? "").replace(/[&<>'"]/g, char => ({
+            "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", "\"": "&quot;"
+        }[char]));
+    }
+
+    function renderReport(text) {
+        // The writer returns lightweight Markdown. Escape first so LLM output
+        // can never become executable HTML, then render only safe formatting.
+        return escapeHtml(text)
+            .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+            .replace(/(^|\n)- /g, "$1<span class=\"report-bullet\">•</span> ")
+            .replace(/\n/g, "<br>");
     }
 
     function logout() {
@@ -279,6 +300,16 @@
         if (score >= 0.75) return "high";
         if (score >= 0.5) return "medium";
         return "low";
+    }
+
+    function confidenceLabel(score) {
+        if (score >= 0.75) return "High estimate";
+        if (score >= 0.5) return "Medium estimate";
+        return "Low estimate";
+    }
+
+    function confidenceDisplay(score) {
+        return `${(score * 100).toFixed(0)}% · ${confidenceLabel(score)}`;
     }
 
     function formatDateTime(isoString) {
@@ -321,7 +352,7 @@
                 const confCls = inc.root_cause_confidence != null ? confidenceClass(inc.root_cause_confidence) : "low";
                 div.innerHTML = `
                     <div class="incident-time">${formatDateTime(inc.created_at)} &middot; ${timeAgo(inc.created_at)}</div>
-                    <div class="incident-snippet">${snippet}</div>
+                    <div class="incident-snippet">${escapeHtml(snippet)}</div>
                     <span class="incident-conf confidence-tag ${confCls}">${conf}</span>
                 `;
                 div.onclick = () => loadIncidentDetail(inc.id);
@@ -454,24 +485,24 @@
             const row = document.createElement("div");
             row.className = "finding-row";
             row.innerHTML = `
-                <div class="finding-angle">${f.angle}</div>
-                <div class="finding-text">${f.finding} <span class="conf">(confidence ${(f.confidence * 100).toFixed(0)}%)</span></div>
+                <div class="finding-angle">${escapeHtml(f.angle)}</div>
+                <div class="finding-text">${escapeHtml(f.finding)} <span class="conf">(model estimate: ${confidenceDisplay(f.confidence)})</span></div>
             `;
             findingsList.appendChild(row);
         });
 
         document.getElementById("rootCause").textContent = data.root_cause;
         const rootBadge = document.getElementById("rootConfidence");
-        rootBadge.textContent = (data.root_cause_confidence * 100).toFixed(0) + "%";
+        rootBadge.textContent = confidenceDisplay(data.root_cause_confidence);
         rootBadge.className = "confidence-tag " + confidenceClass(data.root_cause_confidence);
 
         document.getElementById("suggestedFix").textContent = data.suggested_fix;
         const fixBadge = document.getElementById("fixConfidence");
-        fixBadge.textContent = (data.fix_confidence * 100).toFixed(0) + "%";
+        fixBadge.textContent = confidenceDisplay(data.fix_confidence);
         fixBadge.className = "confidence-tag " + confidenceClass(data.fix_confidence);
 
         document.getElementById("reviewFlag").style.display = data.needs_human_review ? "inline-flex" : "none";
-        document.getElementById("fullReport").textContent = data.final_report;
+        document.getElementById("fullReport").innerHTML = renderReport(data.final_report);
         document.getElementById("downloadMsg").style.display = "none";
         document.getElementById("resultBox").style.display = "block";
     }

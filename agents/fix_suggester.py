@@ -27,6 +27,13 @@ def fix_suggester_agent(state: IncidentState) -> IncidentState:
 
     root_cause_confidence = state["root_cause_confidence"]
 
+    # Broad incidents are never safe to auto-approve solely from an LLM
+    # confidence score. Escalate them so an engineer reviews the diagnosis
+    # before any remediation is applied.
+    angle_count = len(state.get("investigation_angles") or [])
+    is_critical_log = "critical" in state.get("raw_log", "").lower()
+    requires_human_review = angle_count >= 10 or is_critical_log
+
     if root_cause_confidence < CONFIDENCE_THRESHOLD:
         print(f"[FIX SUGGESTER AGENT] Confidence bahut low hai ({root_cause_confidence}), human review chahiye")
         state["suggested_fix"] = "Confidence bahut low thi, isliye fix suggest nahi kiya gaya"
@@ -40,6 +47,14 @@ def fix_suggester_agent(state: IncidentState) -> IncidentState:
 
 Root cause:
 "{root_cause}"
+
+Confidence rubric:
+- 0.90-1.00: the remediation directly addresses a well-supported cause and has low operational risk
+- 0.75-0.89: actionable recommendation, but validation or missing environment details remain
+- 0.50-0.74: useful hypothesis that needs significant engineering review
+- below 0.50: do not recommend applying automatically
+Do not default to a familiar rounded value such as 0.85 or 0.92. Score the
+recommendation's evidence and operational safety using two decimal places.
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{
@@ -56,7 +71,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         parsed = json.loads(raw_output)
         state["suggested_fix"] = parsed["suggested_fix"]
         state["fix_confidence"] = float(parsed["confidence"])
-        state["needs_human_review"] = state["fix_confidence"] < CONFIDENCE_THRESHOLD
+        state["needs_human_review"] = (
+            state["fix_confidence"] < CONFIDENCE_THRESHOLD
+            or requires_human_review
+        )
 
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"[FIX SUGGESTER AGENT] JSON parse error: {e}")

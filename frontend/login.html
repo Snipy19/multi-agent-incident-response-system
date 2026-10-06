@@ -81,7 +81,9 @@
 </div>
 
 <script>
-    const API_BASE = "http://127.0.0.1:8000";
+    const API_BASE = window.location.port === "8000"
+        ? window.location.origin
+        : "http://127.0.0.1:8000";
     const GOOGLE_CLIENT_ID = "647599107950-qdn3eek122ano8dmj1d1lpj5569v7ibc.apps.googleusercontent.com";
     let mode = "login";
 
