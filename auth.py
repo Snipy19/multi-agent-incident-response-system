@@ -5,12 +5,25 @@ Password hashing with bcrypt and JWT token creation/verification.
 """
 
 import os
+import warnings
 from datetime import datetime, timedelta
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 
-# The secret should be provided through the environment in production.
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-key-change-in-production-abc123xyz")
+# Production tokens must use a secret supplied by the deployment environment.
+# A development-only fallback keeps local setup simple but can never be used in
+# a production deployment without an explicit startup failure.
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development").lower()
+SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+if not SECRET_KEY:
+    if ENVIRONMENT == "production":
+        raise RuntimeError("JWT_SECRET_KEY must be configured in production")
+    SECRET_KEY = "local-development-secret-change-me"
+    warnings.warn(
+        "JWT_SECRET_KEY is not configured; using a development-only secret.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 

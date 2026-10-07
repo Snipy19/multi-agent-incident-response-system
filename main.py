@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
@@ -36,9 +36,18 @@ init_db()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    # Explicit origins prevent arbitrary websites from calling the API from a
+    # browser. Set CORS_ORIGINS as a comma-separated list in deployment.
+    allow_origins=[
+        origin.strip()
+        for origin in os.getenv(
+            "CORS_ORIGINS",
+            "http://127.0.0.1:8000,http://localhost:8000",
+        ).split(",")
+        if origin.strip()
+    ],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # Serve the frontend from the same origin as the API in local and container
@@ -62,32 +71,34 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 # Pydantic validates request bodies before endpoint logic runs.
 
 class LogRequest(BaseModel):
-    raw_log: str
+    # Limit payload size so a single request cannot consume excessive memory
+    # or trigger an unexpectedly expensive LLM investigation.
+    raw_log: str = Field(..., min_length=1, max_length=250_000)
 
 
 class SignupRequest(BaseModel):
-    username: str
-    email: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=32)
+    email: str = Field(..., min_length=5, max_length=254)
+    password: str = Field(..., min_length=8, max_length=128)
 
 
 class LoginRequest(BaseModel):
-    username: str
-    password: str
+    username: str = Field(..., min_length=3, max_length=32)
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 class GoogleLoginRequest(BaseModel):
-    id_token: str
+    id_token: str = Field(..., min_length=1, max_length=8192)
 
 
 class ForgotPasswordRequest(BaseModel):
-    username: str
+    username: str = Field(..., min_length=3, max_length=32)
 
 
 class ResetPasswordRequest(BaseModel):
-    username: str
-    otp: str
-    new_password: str
+    username: str = Field(..., min_length=3, max_length=32)
+    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+    new_password: str = Field(..., min_length=8, max_length=128)
 
 
 # ---------- AUTH ENDPOINTS (username/password) ----------
@@ -98,8 +109,8 @@ def signup(request: SignupRequest):
         raise HTTPException(status_code=400, detail="Username already taken")
     if get_user_by_email(request.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-    if len(request.password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if len(request.password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
     user_id = str(uuid.uuid4())
     password_hash = hash_password(request.password)
@@ -187,8 +198,8 @@ def reset_password(request: ResetPasswordRequest):
     if record["otp"] != request.otp:
         raise HTTPException(status_code=400, detail="Incorrect OTP.")
 
-    if len(request.new_password) < 6:
-        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if len(request.new_password) < 8:
+        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
 
     new_hash = hash_password(request.new_password)
     update_user_password(request.username, new_hash)

@@ -68,6 +68,23 @@ def test_protected_routes_reject_missing_authentication(api_client: TestClient):
     assert api_client.post("/analyze", json={"raw_log": "error"}).status_code == 401
 
 
+def test_request_validation_rejects_unsafe_input_sizes(api_client: TestClient):
+    """Request schemas reject weak credentials and oversized log payloads."""
+    weak_signup = api_client.post(
+        "/signup",
+        json={"username": "short", "email": "short@example.com", "password": "123"},
+    )
+    account = create_account(api_client, "validator", "validator@example.com")
+    oversized_log = api_client.post(
+        "/analyze",
+        json={"raw_log": "x" * 250_001},
+        headers={"Authorization": f"Bearer {account['access_token']}"},
+    )
+
+    assert weak_signup.status_code == 422
+    assert oversized_log.status_code == 422
+
+
 def test_incident_data_is_scoped_to_the_authenticated_user(api_client: TestClient):
     """A user's incident list must not expose another user's records."""
     alice = create_account(api_client, "alice", "alice@example.com")
