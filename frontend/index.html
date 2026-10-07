@@ -323,6 +323,7 @@
     }
 
     function confidenceDisplay(score) {
+        if (typeof score !== "number" || Number.isNaN(score)) return "Not available";
         return `${(score * 100).toFixed(0)}% · ${confidenceLabel(score)}`;
     }
 
@@ -505,11 +506,16 @@
 
     function renderResult(data) {
         document.getElementById("anomalyReason").textContent = data.anomaly_reason;
-        document.getElementById("angleCount").textContent = data.investigation_angles.length + " agents spawned";
+        const angles = Array.isArray(data.investigation_angles) ? data.investigation_angles : [];
+        const findings = Array.isArray(data.investigation_findings) ? data.investigation_findings : [];
+        document.getElementById("angleCount").textContent = angles.length + " agents spawned";
 
         const findingsList = document.getElementById("findingsList");
         findingsList.innerHTML = "";
-        data.investigation_findings.forEach(f => {
+        if (!data.is_anomaly) {
+            findingsList.innerHTML = '<div class="empty-sidebar">No investigation required because the log appears normal.</div>';
+        }
+        findings.forEach(f => {
             const row = document.createElement("div");
             row.className = "finding-row";
             row.innerHTML = `
@@ -530,7 +536,9 @@
         fixBadge.className = "confidence-tag " + confidenceClass(data.fix_confidence);
 
         document.getElementById("reviewFlag").style.display = data.needs_human_review ? "inline-flex" : "none";
-        document.getElementById("fullReport").innerHTML = renderReport(data.final_report);
+        document.getElementById("fullReport").innerHTML = data.final_report
+            ? renderReport(data.final_report)
+            : '<p>No incident report was generated because no anomaly was detected.</p>';
         document.getElementById("downloadMsg").style.display = "none";
         document.getElementById("resultBox").style.display = "block";
     }
