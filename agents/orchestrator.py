@@ -6,13 +6,18 @@ Selects grounded technical investigation angles from an incident log.
 
 import json
 import os
-import re
 
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 
 from state import IncidentState
 from utils.llm_helper import invoke_with_retry
+from utils.agent_planning import (
+    MAX_AGENT_COUNT,
+    named_service_targets,
+    deduplicate_angles,
+    requested_load_test_targets,
+)
 
 load_dotenv()
 
@@ -23,43 +28,6 @@ llm = ChatGroq(
     reasoning_effort="low",
     api_key=os.getenv("GROQ_API_KEY"),
 )
-
-MAX_AGENT_COUNT = int(os.getenv("MAX_AGENT_COUNT", "100"))
-
-
-def _named_service_targets(raw_log: str) -> list[str]:
-    """Extract explicit service identifiers for evidence-based fan-out."""
-    matches = re.findall(r"\bservice[-_]\d+\b", raw_log, flags=re.IGNORECASE)
-    return list(dict.fromkeys(matches))
-
-
-def _requested_load_test_targets(raw_log: str, requested_count: int) -> list[str]:
-    """Create exactly the requested number of real investigator targets."""
-    targets = _named_service_targets(raw_log)
-    targets = targets[:requested_count]
-
-    # If the supplied log has fewer named services, synthetic labels are used
-    # only for the explicit load test; adaptive production mode never invents
-    # systems that are absent from the evidence.
-    targets.extend(
-        f"load-test-agent-{index:03d}"
-        for index in range(len(targets) + 1, requested_count + 1)
-    )
-    return targets
-
-
-def _deduplicate_angles(angles: list[str]) -> list[str]:
-    """Remove repeated labels while preserving the model's evidence order."""
-    unique = []
-    seen = set()
-    for angle in angles:
-        label = str(angle).strip()
-        key = label.casefold()
-        if label and key not in seen:
-            seen.add(key)
-            unique.append(label)
-    return unique[:MAX_AGENT_COUNT]
-
 
 def orchestrator_agent(state: IncidentState) -> IncidentState:
     # The orchestrator controls cost and relevance by selecting only angles
@@ -74,7 +42,7 @@ def orchestrator_agent(state: IncidentState) -> IncidentState:
             int(state.get("requested_agent_count") or 1),
             MAX_AGENT_COUNT,
         )
-        angles = _requested_load_test_targets(raw_log, requested_count)
+        angles = requested_load_test_targets(raw_log, requested_count)
         state["investigation_angles"] = angles
         print(f"[ORCHESTRATOR AGENT] Load-test mode selected {len(angles)} targets")
         return state
@@ -142,14 +110,14 @@ Respond ONLY with JSON: {{"angles": ["label1", "label2", ...]}}"""
 
     if not isinstance(angles, list):
         angles = ["General"]
-    angles = _deduplicate_angles(angles)
+    angles = deduplicate_angles(angles)
 
     # When the evidence contains many explicitly named services, preserving
     # one target per service is more useful than collapsing them into generic
     # categories such as Database or Network.
-    named_targets = _named_service_targets(raw_log)
+    named_targets = named_service_targets(raw_log)
     if len(named_targets) >= 20:
-        angles = _deduplicate_angles(named_targets)
+        angles = deduplicate_angles(named_targets)
 
     state["investigation_angles"] = angles
     print(f"[ORCHESTRATOR AGENT] Selected angles: {angles} (total: {len(angles)})")
