@@ -35,8 +35,8 @@ def spawn_investigators(state: IncidentState):
     """
     Core function for dynamic investigator spawning.
 
-    The orchestrator selects a dynamic list of investigation angles
-    (for example, ["Database", "Memory", "Disk I/O"]).
+    The orchestrator selects a dynamic list of independent investigation
+    angles (for example, ["Database", "Network", "Queueing"]).
 
     This function creates one Send() object for each angle.
     Send("investigator", {...}) runs the investigator node once

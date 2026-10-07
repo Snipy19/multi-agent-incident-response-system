@@ -24,7 +24,8 @@ class IncidentState(TypedDict):
     is_anomaly: Optional[bool]
     anomaly_reason: Optional[str]
 
-    # The orchestrator selects the number and names of investigation angles.
+    # Adaptive mode selects independent hypotheses; load-test mode may select
+    # an exact requested count for scalability benchmarking.
     investigation_angles: Optional[List[str]]
 
     # Parallel investigators append their findings through operator.add.

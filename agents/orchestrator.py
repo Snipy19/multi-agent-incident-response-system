@@ -14,7 +14,6 @@ from state import IncidentState
 from utils.llm_helper import invoke_with_retry
 from utils.agent_planning import (
     MAX_AGENT_COUNT,
-    named_service_targets,
     deduplicate_angles,
     requested_load_test_targets,
 )
@@ -62,8 +61,13 @@ STRICT GROUNDING RULE - this is critical:
 - Create an angle only for a system, component, or symptom explicitly
   mentioned in the log, or directly implied by named evidence.
 - Do not invent speculative systems that are not supported by the log.
+- Do not create one angle for every service, log line, or repeated symptom.
+- Group services that show the same failure pattern under one investigation.
+- Create separate angles only for independent failure domains or competing
+  root-cause hypotheses that require different evidence.
 - For short logs, produce only 1-3 focused angles.
-- Produce many angles only when the log names many distinct failing systems.
+- For complex logs, produce more angles only when they represent distinct
+  failure domains; complexity alone does not justify one agent per service.
 - When uncertain, choose fewer high-relevance angles rather than speculation.
 
 Keep each angle name short (1-3 words, for example: "Database", "TLS Certificates", "Kafka Lag").
@@ -111,13 +115,6 @@ Respond ONLY with JSON: {{"angles": ["label1", "label2", ...]}}"""
     if not isinstance(angles, list):
         angles = ["General"]
     angles = deduplicate_angles(angles)
-
-    # When the evidence contains many explicitly named services, preserving
-    # one target per service is more useful than collapsing them into generic
-    # categories such as Database or Network.
-    named_targets = named_service_targets(raw_log)
-    if len(named_targets) >= 20:
-        angles = deduplicate_angles(named_targets)
 
     state["investigation_angles"] = angles
     print(f"[ORCHESTRATOR AGENT] Selected angles: {angles} (total: {len(angles)})")
