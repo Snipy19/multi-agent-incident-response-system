@@ -19,7 +19,6 @@ from pydantic import BaseModel, Field
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
-from graph import app as graph_app
 from db.database import (
     init_db, save_incident, get_all_incidents, get_incident_by_id,
     create_user, get_user_by_username, get_user_by_email, update_user_password,
@@ -29,6 +28,14 @@ from db.database import (
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from utils.email_helper import send_otp_email
 from utils.report_export import build_markdown, build_text, build_pdf
+
+
+def get_graph_app():
+    """Load the expensive LangGraph/RAG pipeline only for a real analysis."""
+    # Lazy loading keeps authentication, health checks, report downloads, and
+    # CI tests fast without changing the real analysis path.
+    from graph import app as graph_app
+    return graph_app
 
 app = FastAPI(title="Autonomous Incident Response API")
 
@@ -229,7 +236,7 @@ def analyze_incident(request: LogRequest, current_user: dict = Depends(get_curre
         "needs_human_review": None, "final_report": None
     }
 
-    result = graph_app.invoke(initial_state)
+    result = get_graph_app().invoke(initial_state)
 
     incident_id = str(uuid.uuid4())
     save_incident(incident_id, current_user["user_id"], result)
