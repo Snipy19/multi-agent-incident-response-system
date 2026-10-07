@@ -5,7 +5,7 @@ The fan-out planner must give each investigator a focused evidence slice so
 large incidents remain useful and affordable to analyze.
 """
 
-from graph import build_focus_log
+from utils.evidence import build_focus_log
 
 
 def test_focus_log_selects_angle_specific_lines():
