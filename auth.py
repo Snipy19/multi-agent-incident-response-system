@@ -6,7 +6,7 @@ Password hashing with bcrypt and JWT token creation/verification.
 
 import os
 import warnings
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from passlib.context import CryptContext
 from jose import jwt, JWTError
 
@@ -39,7 +39,9 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(user_id: str, username: str) -> str:
-    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    # Use an explicit UTC timezone so token expiry remains correct across
+    # machines and avoids the deprecated naive-UTC datetime API.
+    expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
     payload = {"sub": user_id, "username": username, "exp": expire}
     return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
 
