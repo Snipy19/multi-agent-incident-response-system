@@ -21,6 +21,8 @@ from graph import app  # noqa: E402
 def initial_state(raw_log: str) -> dict:
     return {
         "raw_log": raw_log,
+        "agent_mode": "adaptive",
+        "requested_agent_count": None,
         "is_anomaly": None,
         "anomaly_reason": None,
         "investigation_angles": None,

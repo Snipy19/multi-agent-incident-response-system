@@ -16,6 +16,11 @@ class InvestigationFinding(TypedDict):
 class IncidentState(TypedDict):
     raw_log: str
 
+    # Adaptive mode follows evidence; load_test mode intentionally requests a
+    # controlled number of real investigator executions for scalability tests.
+    agent_mode: Optional[str]
+    requested_agent_count: Optional[int]
+
     is_anomaly: Optional[bool]
     anomaly_reason: Optional[str]
 

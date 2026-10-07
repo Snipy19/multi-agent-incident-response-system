@@ -49,7 +49,11 @@ def spawn_investigators(state: IncidentState):
     print(f"[SPAWNER] Spawning {len(angles)} investigator(s): {angles}")
 
     return [
-        Send("investigator", {"angle": angle, "raw_log": state["raw_log"]})
+        Send("investigator", {
+            "angle": angle,
+            "raw_log": state["raw_log"],
+            "agent_mode": state.get("agent_mode", "adaptive"),
+        })
         for angle in angles
     ]
 

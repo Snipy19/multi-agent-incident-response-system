@@ -16,6 +16,7 @@ from fastapi.responses import Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
+from typing import Literal, Optional
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
@@ -81,6 +82,8 @@ class LogRequest(BaseModel):
     # Limit payload size so a single request cannot consume excessive memory
     # or trigger an unexpectedly expensive LLM investigation.
     raw_log: str = Field(..., min_length=1, max_length=250_000)
+    agent_mode: Literal["adaptive", "load_test"] = "adaptive"
+    target_agent_count: Optional[int] = Field(default=None, ge=1, le=100)
 
 
 class SignupRequest(BaseModel):
@@ -227,8 +230,16 @@ def health_check():
 
 @app.post("/analyze")
 def analyze_incident(request: LogRequest, current_user: dict = Depends(get_current_user)):
+    if request.agent_mode == "load_test" and request.target_agent_count is None:
+        raise HTTPException(
+            status_code=422,
+            detail="target_agent_count is required when agent_mode is load_test",
+        )
+
     initial_state = {
         "raw_log": request.raw_log,
+        "agent_mode": request.agent_mode,
+        "requested_agent_count": request.target_agent_count,
         "is_anomaly": None, "anomaly_reason": None,
         "investigation_angles": None, "investigation_findings": [],
         "root_cause": None, "root_cause_confidence": None,

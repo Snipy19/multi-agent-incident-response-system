@@ -193,6 +193,17 @@
         <div class="input-panel" id="inputPanel">
             <label class="input-label">Log Input</label>
             <textarea id="logInput" placeholder="e.g. CRITICAL: checkout-service reporting database timeout (30s), memory at 96%, disk I/O latency at 800ms..."></textarea>
+            <div class="analysis-options" style="display:flex;gap:16px;align-items:end;margin-top:14px;flex-wrap:wrap;">
+                <label class="input-label" style="margin:0;">Investigation Mode
+                    <select id="agentMode" onchange="toggleAgentCount()" style="display:block;margin-top:6px;padding:9px 12px;background:#0b1220;color:#dbeafe;border:1px solid #334155;border-radius:7px;">
+                        <option value="adaptive">Adaptive production mode</option>
+                        <option value="load_test">Load test mode</option>
+                    </select>
+                </label>
+                <label id="agentCountWrap" class="input-label" style="display:none;margin:0;">Target agents
+                    <input id="targetAgentCount" type="number" min="1" max="100" value="10" style="display:block;width:120px;margin-top:6px;padding:9px 12px;background:#0b1220;color:#dbeafe;border:1px solid #334155;border-radius:7px;">
+                </label>
+            </div>
             <div class="action-row">
                 <button id="analyzeBtn" onclick="analyzeLog()">Run Analysis</button>
                 <button class="btn-secondary" id="newBtnTop" onclick="resetToNew()" style="display:none;">New Analysis</button>
@@ -400,6 +411,11 @@
     // ---------- ANALYZE ----------
     // This request waits for the current synchronous graph run to finish.
 
+    function toggleAgentCount() {
+        const loadTest = document.getElementById("agentMode").value === "load_test";
+        document.getElementById("agentCountWrap").style.display = loadTest ? "block" : "none";
+    }
+
     async function analyzeLog() {
         const logText = document.getElementById("logInput").value.trim();
         const btn = document.getElementById("analyzeBtn");
@@ -419,11 +435,18 @@
         btn.disabled = true;
         loading.style.display = "inline";
 
+        const agentMode = document.getElementById("agentMode").value;
+        const targetAgentCount = Number(document.getElementById("targetAgentCount").value);
+
         try {
             const response = await fetch(`${API_BASE}/analyze`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...authHeaders() },
-                body: JSON.stringify({ raw_log: logText })
+                body: JSON.stringify({
+                    raw_log: logText,
+                    agent_mode: agentMode,
+                    target_agent_count: agentMode === "load_test" ? targetAgentCount : null
+                })
             });
 
             if (handleAuthError(response)) return;

@@ -6,6 +6,7 @@ Selects grounded technical investigation angles from an incident log.
 
 import json
 import os
+import re
 
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
@@ -23,6 +24,29 @@ llm = ChatGroq(
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
+MAX_AGENT_COUNT = int(os.getenv("MAX_AGENT_COUNT", "100"))
+
+
+def _named_service_targets(raw_log: str) -> list[str]:
+    """Extract explicit service identifiers for evidence-based fan-out."""
+    matches = re.findall(r"\bservice[-_]\d+\b", raw_log, flags=re.IGNORECASE)
+    return list(dict.fromkeys(matches))
+
+
+def _requested_load_test_targets(raw_log: str, requested_count: int) -> list[str]:
+    """Create exactly the requested number of real investigator targets."""
+    targets = _named_service_targets(raw_log)
+    targets = targets[:requested_count]
+
+    # If the supplied log has fewer named services, synthetic labels are used
+    # only for the explicit load test; adaptive production mode never invents
+    # systems that are absent from the evidence.
+    targets.extend(
+        f"load-test-agent-{index:03d}"
+        for index in range(len(targets) + 1, requested_count + 1)
+    )
+    return targets
+
 
 def orchestrator_agent(state: IncidentState) -> IncidentState:
     # The orchestrator controls cost and relevance by selecting only angles
@@ -31,6 +55,16 @@ def orchestrator_agent(state: IncidentState) -> IncidentState:
 
     raw_log = state["raw_log"]
     anomaly_reason = state["anomaly_reason"]
+
+    if state.get("agent_mode") == "load_test":
+        requested_count = min(
+            int(state.get("requested_agent_count") or 1),
+            MAX_AGENT_COUNT,
+        )
+        angles = _requested_load_test_targets(raw_log, requested_count)
+        state["investigation_angles"] = angles
+        print(f"[ORCHESTRATOR AGENT] Load-test mode selected {len(angles)} targets")
+        return state
 
     prompt = f"""You are a senior DevOps engineer planning an incident investigation.
 
@@ -92,6 +126,13 @@ Respond ONLY with JSON: {{"angles": ["label1", "label2", ...]}}"""
 
     if not angles:
         angles = ["General"]
+
+    # When the evidence contains many explicitly named services, preserving
+    # one target per service is more useful than collapsing them into generic
+    # categories such as Database or Network.
+    named_targets = _named_service_targets(raw_log)
+    if len(named_targets) >= 20:
+        angles = named_targets[:MAX_AGENT_COUNT]
 
     state["investigation_angles"] = angles
     print(f"[ORCHESTRATOR AGENT] Selected angles: {angles} (total: {len(angles)})")

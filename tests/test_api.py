@@ -85,6 +85,30 @@ def test_request_validation_rejects_unsafe_input_sizes(api_client: TestClient):
     assert oversized_log.status_code == 422
 
 
+def test_load_test_mode_requests_exact_agent_count(api_client: TestClient):
+    """The API validates the explicit scalable-investigation test mode."""
+    account = create_account(api_client, "loadtester", "loadtester@example.com")
+    headers = {"Authorization": f"Bearer {account['access_token']}"}
+
+    missing_count = api_client.post(
+        "/analyze",
+        json={"raw_log": "CRITICAL service-001 failure", "agent_mode": "load_test"},
+        headers=headers,
+    )
+    too_many = api_client.post(
+        "/analyze",
+        json={
+            "raw_log": "CRITICAL service-001 failure",
+            "agent_mode": "load_test",
+            "target_agent_count": 101,
+        },
+        headers=headers,
+    )
+
+    assert missing_count.status_code == 422
+    assert too_many.status_code == 422
+
+
 def test_incident_data_is_scoped_to_the_authenticated_user(api_client: TestClient):
     """A user's incident list must not expose another user's records."""
     alice = create_account(api_client, "alice", "alice@example.com")
