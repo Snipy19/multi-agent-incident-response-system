@@ -4,3 +4,5 @@ __pycache__/
 *.pyc
 Outh.json
 reports/
+.pytest_tmp/
+.pytest_cache_local/
