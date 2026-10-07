@@ -48,6 +48,19 @@ def _requested_load_test_targets(raw_log: str, requested_count: int) -> list[str
     return targets
 
 
+def _deduplicate_angles(angles: list[str]) -> list[str]:
+    """Remove repeated labels while preserving the model's evidence order."""
+    unique = []
+    seen = set()
+    for angle in angles:
+        label = str(angle).strip()
+        key = label.casefold()
+        if label and key not in seen:
+            seen.add(key)
+            unique.append(label)
+    return unique[:MAX_AGENT_COUNT]
+
+
 def orchestrator_agent(state: IncidentState) -> IncidentState:
     # The orchestrator controls cost and relevance by selecting only angles
     # supported by the submitted evidence.
@@ -127,12 +140,16 @@ Respond ONLY with JSON: {{"angles": ["label1", "label2", ...]}}"""
     if not angles:
         angles = ["General"]
 
+    if not isinstance(angles, list):
+        angles = ["General"]
+    angles = _deduplicate_angles(angles)
+
     # When the evidence contains many explicitly named services, preserving
     # one target per service is more useful than collapsing them into generic
     # categories such as Database or Network.
     named_targets = _named_service_targets(raw_log)
     if len(named_targets) >= 20:
-        angles = named_targets[:MAX_AGENT_COUNT]
+        angles = _deduplicate_angles(named_targets)
 
     state["investigation_angles"] = angles
     print(f"[ORCHESTRATOR AGENT] Selected angles: {angles} (total: {len(angles)})")

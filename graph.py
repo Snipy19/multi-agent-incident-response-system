@@ -19,6 +19,22 @@ from agents.fix_suggester import fix_suggester_agent
 from agents.report_writer import report_writer_agent
 
 
+def build_focus_log(raw_log: str, angle: str, max_chars: int = 8000) -> str:
+    """Return evidence relevant to one investigator instead of duplicating all logs."""
+    lines = raw_log.splitlines()
+    if not lines:
+        return raw_log[:max_chars]
+
+    keywords = [word.lower() for word in angle.replace("_", "-").split() if len(word) > 2]
+    relevant = [
+        line for line in lines
+        if any(keyword in line.lower() for keyword in keywords)
+    ]
+    selected = relevant or lines[:40]
+    focus_log = "\n".join(selected)
+    return focus_log[:max_chars]
+
+
 def route_after_log_monitor(state: IncidentState) -> str:
     # This conditional edge prevents normal logs from triggering expensive
     # orchestration and investigation calls.
@@ -52,6 +68,7 @@ def spawn_investigators(state: IncidentState):
         Send("investigator", {
             "angle": angle,
             "raw_log": state["raw_log"],
+            "focus_log": build_focus_log(state["raw_log"], angle),
             "agent_mode": state.get("agent_mode", "adaptive"),
         })
         for angle in angles

@@ -22,13 +22,16 @@ llm = ChatGroq(
 
 
 def investigator_agent(state: dict) -> dict:
-    # Each parallel investigator receives one angle and a copy of the raw log.
+    # Each parallel investigator receives one angle and a focused evidence
+    # slice. This prevents a large incident log from being duplicated in every
+    # prompt and makes high fan-out analysis more token-efficient.
     angle = state["angle"]
     raw_log = state["raw_log"]
+    focus_log = state.get("focus_log") or raw_log[:8000]
 
     print(f"\n[INVESTIGATOR - {angle}] Starting investigation...")
 
-    angle_specific_query = f"{angle}: {raw_log}"
+    angle_specific_query = f"{angle}: {focus_log}"
     # RAG provides historical context without replacing evidence from the
     # current incident.
     similar_patterns = retrieve_similar_patterns(angle_specific_query, top_k=3)
@@ -45,8 +48,8 @@ def investigator_agent(state: dict) -> dict:
 
     prompt = f"""You are a DevOps specialist focused specifically on the "{angle}" aspect of a system.
 
-Log entry:
-"{raw_log}"
+Relevant evidence for this angle:
+"{focus_log}"
 
 Here are similar log patterns observed in real production systems in the past (for reference context, not necessarily the same incident):
 {context_text}
