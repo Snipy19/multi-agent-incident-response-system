@@ -14,6 +14,8 @@ DB_PATH = "db/incidents.db"
 
 @contextmanager
 def get_connection():
+    # A fresh connection per operation keeps SQLite usage isolated and makes
+    # the data layer easy to replace with a managed database later.
     conn = sqlite3.connect(DB_PATH)
     conn.row_factory = sqlite3.Row
     try:
@@ -24,6 +26,7 @@ def get_connection():
 
 
 def init_db():
+    # CREATE TABLE IF NOT EXISTS makes startup safe for a new local checkout.
     with get_connection() as conn:
         conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
@@ -142,6 +145,8 @@ def delete_otp(username: str):
 # ---------- INCIDENT FUNCTIONS ----------
 
 def save_incident(incident_id: str, user_id: str, result: dict):
+    # Store the complete structured workflow result so reports can be rebuilt
+    # later without calling the LLM again.
     with get_connection() as conn:
         conn.execute("""
             INSERT INTO incidents (

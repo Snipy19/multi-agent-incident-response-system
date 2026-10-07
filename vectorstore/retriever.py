@@ -31,10 +31,12 @@ def retrieve_similar_patterns(query_log: str, top_k: int = 3) -> list[dict]:
 
     Return dictionaries containing template, context metadata, and distance.
     """
+    # Encode the incoming query with the same model used during index build.
     query_embedding = _model.encode([query_log])
 
     distances, indices = _index.search(np.array(query_embedding).astype("float32"), top_k)
 
+    # FAISS returns row positions; metadata must remain aligned with the index.
     results = []
     for dist, idx in zip(distances[0], indices[0]):
         row = _metadata.iloc[idx]

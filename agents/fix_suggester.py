@@ -23,6 +23,8 @@ CONFIDENCE_THRESHOLD = 0.5
 
 
 def fix_suggester_agent(state: IncidentState) -> IncidentState:
+    # Remediation is advisory only. Low-confidence and broad/critical cases
+    # are escalated instead of being treated as safe for automatic action.
     print("\n[FIX SUGGESTER AGENT] Preparing a remediation recommendation...")
 
     root_cause_confidence = state["root_cause_confidence"]

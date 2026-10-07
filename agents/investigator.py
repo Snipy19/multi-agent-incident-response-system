@@ -22,12 +22,15 @@ llm = ChatGroq(
 
 
 def investigator_agent(state: dict) -> dict:
+    # Each parallel investigator receives one angle and a copy of the raw log.
     angle = state["angle"]
     raw_log = state["raw_log"]
 
     print(f"\n[INVESTIGATOR - {angle}] Starting investigation...")
 
     angle_specific_query = f"{angle}: {raw_log}"
+    # RAG provides historical context without replacing evidence from the
+    # current incident.
     similar_patterns = retrieve_similar_patterns(angle_specific_query, top_k=3)
     context_text = "\n".join(
         [
@@ -69,6 +72,8 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 
     print(f"[INVESTIGATOR - {angle}] LLM ka raw output: {raw_output}")
 
+    # Invalid JSON becomes a low-confidence finding rather than crashing the
+    # remaining parallel investigators.
     try:
         parsed = json.loads(raw_output)
         finding: InvestigationFinding = {

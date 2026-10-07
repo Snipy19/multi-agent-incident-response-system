@@ -1,3 +1,13 @@
+"""
+LANGGRAPH WORKFLOW
+------------------
+The workflow follows this sequence:
+1. Detect whether the submitted log describes an anomaly.
+2. Route anomalies to the orchestrator for grounded investigation planning.
+3. Fan out one investigator per selected angle.
+4. Aggregate findings, recommend a fix, and write the final report.
+"""
+
 from langgraph.graph import StateGraph, END
 from langgraph.types import Send
 from state import IncidentState
@@ -10,6 +20,8 @@ from agents.report_writer import report_writer_agent
 
 
 def route_after_log_monitor(state: IncidentState) -> str:
+    # This conditional edge prevents normal logs from triggering expensive
+    # orchestration and investigation calls.
     if state["is_anomaly"]:
         print("[ROUTER] Anomaly detected; routing to the orchestrator")
         return "continue"
@@ -32,6 +44,7 @@ def spawn_investigators(state: IncidentState):
     One angle creates one investigator execution; 20 angles create
     20 investigator executions that can run in parallel.
     """
+    # LangGraph's Send API creates one independent execution per angle.
     angles = state["investigation_angles"]
     print(f"[SPAWNER] Spawning {len(angles)} investigator(s): {angles}")
 
@@ -41,6 +54,7 @@ def spawn_investigators(state: IncidentState):
     ]
 
 
+# Define the graph schema and register each agent as a workflow node.
 graph = StateGraph(IncidentState)
 
 graph.add_node("log_monitor", log_monitor_agent)
@@ -50,6 +64,7 @@ graph.add_node("aggregator", aggregator_agent)
 graph.add_node("fix_suggester", fix_suggester_agent)
 graph.add_node("report_writer", report_writer_agent)
 
+# Every analysis starts with anomaly detection.
 graph.set_entry_point("log_monitor")
 
 # After the log monitor: continue to the orchestrator or end the workflow.

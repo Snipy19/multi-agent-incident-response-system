@@ -1,4 +1,6 @@
 from state import IncidentState
+
+# Manual smoke test for the final narrative report stage.
 from agents.log_monitor import log_monitor_agent
 from agents.root_cause_analyzer import root_cause_analyzer_agent
 from agents.fix_suggester import fix_suggester_agent

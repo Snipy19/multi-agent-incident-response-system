@@ -21,6 +21,7 @@ llm = ChatGroq(
 
 
 def log_monitor_agent(state: IncidentState) -> IncidentState:
+    # The first agent classifies the log so normal events can exit early.
     print("\n[LOG MONITOR AGENT] Sending the log to the LLM...")
 
     raw_log = state["raw_log"]
@@ -41,6 +42,8 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 
     print(f"[LOG MONITOR AGENT] LLM ka raw output: {raw_output}")
 
+    # Treat malformed model output as an anomaly for safety; silent failures
+    # must not allow a potentially harmful incident to bypass investigation.
     try:
         parsed = json.loads(raw_output)
         state["is_anomaly"] = parsed["is_anomaly"]

@@ -25,6 +25,8 @@ llm = ChatGroq(
 
 
 def orchestrator_agent(state: IncidentState) -> IncidentState:
+    # The orchestrator controls cost and relevance by selecting only angles
+    # supported by the submitted evidence.
     print("\n[ORCHESTRATOR AGENT] Selecting investigation angles...")
 
     raw_log = state["raw_log"]
@@ -58,6 +60,8 @@ Respond ONLY with a valid JSON object in this exact format, with no markdown:
 
     angles = None
 
+    # The fallback prompt is intentionally shorter and more constrained so a
+    # transient formatting failure does not stop the entire incident run.
     try:
         response = invoke_with_retry(llm, prompt)
         raw_output = response.content.strip()

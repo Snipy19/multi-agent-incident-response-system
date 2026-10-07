@@ -1,5 +1,7 @@
 from graph import app
 
+# Manual end-to-end smoke test for the complete LangGraph pipeline.
+
 test_input = {
     "raw_log": "ERROR: Database connection timeout after 30s at checkout-service, also observed high memory usage (95%) and slow disk I/O on the host",
     "is_anomaly": None, "anomaly_reason": None,

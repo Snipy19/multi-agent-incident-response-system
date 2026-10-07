@@ -1,4 +1,6 @@
 from state import IncidentState
+
+# Manual smoke test for the first anomaly-detection stage.
 from agents.log_monitor import log_monitor_agent
 
 test_state: IncidentState = {

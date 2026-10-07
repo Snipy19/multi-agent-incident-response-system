@@ -1,6 +1,9 @@
 """
 FASTAPI BACKEND (username/password + Google + Forgot Password/OTP + report downloads)
 -----------------------------------------------------------------------------------------
+The API owns authentication, incident persistence, report downloads, and the
+entry point for the LangGraph analysis workflow. The frontend is served at /ui
+so local OAuth uses the same origin as the API.
 """
 
 import os
@@ -56,6 +59,7 @@ def get_current_user(token: str = Depends(oauth2_scheme)):
 
 
 # ---------- REQUEST SCHEMAS ----------
+# Pydantic validates request bodies before endpoint logic runs.
 
 class LogRequest(BaseModel):
     raw_log: str
@@ -201,6 +205,7 @@ def health_check():
 
 
 # ---------- PROTECTED ENDPOINTS ----------
+# These endpoints require a valid bearer token and scope data by user ID.
 
 @app.post("/analyze")
 def analyze_incident(request: LogRequest, current_user: dict = Depends(get_current_user)):

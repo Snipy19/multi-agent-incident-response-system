@@ -30,6 +30,8 @@ for csv_path in csv_files:
     # Extract the dataset name from the filename.
     dataset_name = os.path.basename(csv_path).split("_2k")[0]
 
+    # Read each source independently so one malformed dataset can be diagnosed
+    # without hiding which source produced the problem.
     df = pd.read_csv(csv_path)
 
     if "EventTemplate" not in df.columns:
@@ -39,6 +41,7 @@ for csv_path in csv_files:
     # Keep one vector per pattern while preserving occurrence evidence.
     # Keep one vector per pattern to avoid overweighting repeated log lines,
     # but retain useful evidence from all rows that share that pattern.
+    # Repeated rows describe frequency, not separate semantic patterns.
     grouped = df.groupby("EventTemplate", dropna=False)
     unique = grouped.first().reset_index()
     unique["ExampleCount"] = grouped.size().reindex(unique["EventTemplate"]).to_numpy()
@@ -98,7 +101,7 @@ combined["EmbeddingText"] = combined.apply(
 
 print(f"\n[BUILD INDEX] TOTAL unique patterns across all datasets: {len(combined)}")
 
-# Embedding model load karo
+# Generate one enriched embedding per unique pattern.
 print("[BUILD INDEX] Loading the embedding model...")
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
@@ -111,7 +114,7 @@ dimension = embeddings.shape[1]
 index = faiss.IndexFlatL2(dimension)
 index.add(np.array(embeddings).astype("float32"))
 
-# Save karo
+# Persist both the vector index and aligned metadata for retrieval.
 faiss.write_index(index, "vectorstore/hdfs_index.faiss")
 
 with open("vectorstore/hdfs_metadata.pkl", "wb") as f:

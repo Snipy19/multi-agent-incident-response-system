@@ -14,6 +14,8 @@ EMAIL_APP_PASSWORD = os.getenv("EMAIL_APP_PASSWORD")
 
 
 def send_otp_email(to_email: str, otp: str):
+    # Gmail app passwords are loaded from environment variables; credentials
+    # never belong in source code or the repository.
     msg = MIMEMultipart()
     msg["From"] = EMAIL_ADDRESS
     msg["To"] = to_email

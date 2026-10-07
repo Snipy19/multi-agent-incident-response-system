@@ -26,6 +26,8 @@ llm = ChatGroq(
 
 
 def report_writer_agent(state: IncidentState) -> IncidentState:
+    # This narrative is for human readers; downloadable reports use the same
+    # stored facts through utils.report_export.py.
     print("\n[DOCUMENTATION WRITER AGENT] Writing the incident report...")
 
     prompt = f"""You are a technical writer creating an incident post-mortem report for a DevOps team.

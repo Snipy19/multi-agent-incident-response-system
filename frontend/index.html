@@ -158,6 +158,8 @@
 </style>
 </head>
 <body>
+<!-- The dashboard is a single-page workspace for new analyses, incident
+     history, live results, and downloadable reports. -->
 
 <div class="topbar">
     <div class="brand">
@@ -255,6 +257,7 @@
     let activeIncidentId = null;
 
     // ---------- AUTH GUARD ----------
+    // Redirect unauthenticated users before loading private incident data.
     const token = localStorage.getItem("access_token");
     if (!token) {
         window.location.href = "login.html";
@@ -395,6 +398,7 @@
     }
 
     // ---------- ANALYZE ----------
+    // This request waits for the current synchronous graph run to finish.
 
     async function analyzeLog() {
         const logText = document.getElementById("logInput").value.trim();
@@ -441,6 +445,7 @@
     }
 
     // ---------- DOWNLOAD REPORT ----------
+    // Reports are generated from stored data and downloaded as browser blobs.
 
     async function downloadReport(fmt) {
         const msg = document.getElementById("downloadMsg");

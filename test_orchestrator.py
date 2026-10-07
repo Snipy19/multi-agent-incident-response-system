@@ -1,4 +1,6 @@
 from state import IncidentState
+
+# Manual smoke test for anomaly detection followed by angle selection.
 from agents.log_monitor import log_monitor_agent
 from agents.orchestrator import orchestrator_agent
 

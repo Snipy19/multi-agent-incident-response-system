@@ -22,6 +22,8 @@ llm = ChatGroq(
 
 
 def aggregator_agent(state: IncidentState) -> IncidentState:
+    # The aggregator compares specialist findings and separates primary
+    # causes from secondary or cascading symptoms.
     print("\n[AGGREGATOR AGENT] Combining investigator findings...")
 
     findings = state["investigation_findings"]

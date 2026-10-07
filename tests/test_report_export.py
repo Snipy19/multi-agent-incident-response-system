@@ -2,6 +2,7 @@ from utils.report_export import build_markdown, build_pdf, build_text
 
 
 def sample_incident():
+    # Reports should be reproducible from stored structured incident data.
     return {
         "id": "incident-test-1234",
         "created_at": "2026-10-07T10:00:00",

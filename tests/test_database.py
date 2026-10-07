@@ -14,6 +14,7 @@ def isolated_database(tmp_path, monkeypatch):
 
 
 def incident_result():
+    # This fixture represents the structured output saved after a real run.
     return {
         "raw_log": "ERROR: API request timed out",
         "is_anomaly": True,
@@ -49,6 +50,7 @@ def test_user_and_password_reset_data_round_trip(isolated_database):
 
 
 def test_incident_round_trip_is_private_to_user(isolated_database):
+    # Incident ownership must be enforced at the query boundary.
     isolated_database.save_incident("incident-1", "user-1", incident_result())
 
     stored = isolated_database.get_incident_by_id("incident-1", "user-1")

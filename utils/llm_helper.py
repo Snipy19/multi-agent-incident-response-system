@@ -21,6 +21,8 @@ def invoke_with_retry(llm, prompt: str, max_retries: int = 6, base_delay: float 
     max_retries: number of retries after a transient failure
     base_delay: initial retry delay in seconds
     """
+    # Hold the semaphore across retries so a rate-limited call does not allow
+    # a large queued run to overwhelm the provider while backing off.
     with _llm_semaphore:
         for attempt in range(max_retries):
             try:

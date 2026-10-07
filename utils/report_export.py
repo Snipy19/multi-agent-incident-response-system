@@ -46,6 +46,7 @@ _TEXT_REPLACEMENTS = {
 
 
 def _clean_text(value):
+    # Normalize model text before it reaches PDF, Markdown, or the browser.
     text = "" if value is None else str(value)
     for old, new in _TEXT_REPLACEMENTS.items():
         text = text.replace(old, new)
@@ -192,6 +193,7 @@ def _md_cell(text):
 # ---------- MARKDOWN ----------
 
 def build_markdown(incident: dict) -> str:
+    # Markdown is useful for README attachments, tickets, and code reviews.
     incident = _clean_incident(incident)
     findings = incident.get("investigation_findings") or []
     actions = _split_actions(incident.get("suggested_fix"))
@@ -256,6 +258,7 @@ def build_markdown(incident: dict) -> str:
 # ---------- PLAIN TEXT ----------
 
 def build_text(incident: dict) -> str:
+    # Plain text remains portable for terminals, email, and incident systems.
     incident = _clean_incident(incident)
     findings = incident.get("investigation_findings") or []
     actions = _split_actions(incident.get("suggested_fix"))
@@ -451,6 +454,8 @@ def _conf_row(value, note_style):
 
 
 def build_pdf(incident: dict) -> bytes:
+    # The PDF is generated in memory so the API can stream it without creating
+    # temporary report files on disk.
     incident = _clean_incident(incident)
     buffer = io.BytesIO()
     short_id = str(incident["id"])[:8]

@@ -14,6 +14,9 @@ if os.getenv("RUN_LIVE_LLM_TESTS") != "1":
 
 from graph import app  # noqa: E402
 
+# These tests intentionally call the real Groq and RAG stack. They are opt-in
+# because they require credentials, network access, time, and API quota.
+
 
 def initial_state(raw_log: str) -> dict:
     return {
