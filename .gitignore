@@ -7,4 +7,4 @@ reports/
 .pytest_runtime/
 .pytest_tmp/
 .pytest_cache/
-.pytest_cache_local/
+tests/.test_tmp_*/
