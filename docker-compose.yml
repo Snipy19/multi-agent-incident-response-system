@@ -1,0 +1,19 @@
+services:
+  incident-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: incident-response-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      ENVIRONMENT: development
+      CORS_ORIGINS: http://127.0.0.1:8000,http://localhost:8000
+      PORT: 8000
+    volumes:
+      # Development-only SQLite persistence. Replace this with RDS settings
+      # and remove the volume when deploying the production database.
+      - ./db:/app/db
+    restart: unless-stopped
