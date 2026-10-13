@@ -11,14 +11,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Build tools are needed for packages that do not provide a compatible wheel.
-RUN apt-get update \
-    && apt-get install -y --no-install-recommends build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-COPY requirements.txt ./
+COPY requirements-runtime.txt ./
 RUN pip install --upgrade pip \
-    && pip install -r requirements.txt
+    && pip install --no-cache-dir -r requirements-runtime.txt
 
 COPY auth.py graph.py main.py state.py pytest.ini ./
 COPY agents ./agents

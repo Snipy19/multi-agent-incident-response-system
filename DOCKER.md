@@ -21,6 +21,10 @@ Ensure `.env` contains the required local credentials, then run:
 docker compose up --build
 ```
 
+The image uses a CPU-only PyTorch wheel because the current deployment target
+does not provide an NVIDIA GPU. Test-only packages are kept out of the image,
+which reduces dependency downloads and runtime image size.
+
 Open the website at:
 
 ```text
