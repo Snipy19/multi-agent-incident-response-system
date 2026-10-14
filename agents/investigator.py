@@ -3,12 +3,12 @@ INVESTIGATOR AGENT (RAG-integrated)
 """
 
 import os
-import json
 from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState, InvestigationFinding
 from vectorstore.retriever import retrieve_similar_patterns
 from utils.llm_helper import invoke_with_retry
+from utils.guardrails import parse_investigator_output
 
 load_dotenv()
 
@@ -75,22 +75,13 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 
     print(f"[INVESTIGATOR - {angle}] LLM ka raw output: {raw_output}")
 
-    # Invalid JSON becomes a low-confidence finding rather than crashing the
-    # remaining parallel investigators.
-    try:
-        parsed = json.loads(raw_output)
-        finding: InvestigationFinding = {
-            "angle": angle,
-            "finding": parsed["finding"],
-            "confidence": float(parsed["confidence"])
-        }
-    except (json.JSONDecodeError, KeyError, ValueError) as e:
-        print(f"[INVESTIGATOR - {angle}] JSON parse error: {e}")
-        finding: InvestigationFinding = {
-            "angle": angle,
-            "finding": f"{angle} analysis failed because the LLM response could not be parsed.",
-            "confidence": 0.0
-        }
+    # Guardrail validation prevents malformed, out-of-range, or unsupported
+    # model output from entering the aggregator as if it were verified fact.
+    finding: InvestigationFinding = parse_investigator_output(
+        raw_output,
+        angle,
+        focus_log,
+    )
 
     print(f"[INVESTIGATOR - {angle}] Finding: {finding['finding']} (confidence: {finding['confidence']})")
 

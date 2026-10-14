@@ -29,6 +29,7 @@ from db.database import (
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from utils.email_helper import send_otp_email
 from utils.report_export import build_markdown, build_text, build_pdf
+from utils.guardrails import redact_sensitive_data
 
 
 def get_graph_app():
@@ -236,8 +237,12 @@ def analyze_incident(request: LogRequest, current_user: dict = Depends(get_curre
             detail="target_agent_count is required when agent_mode is load_test",
         )
 
+    # Sanitize before the log reaches LangGraph, Groq, RAG, or persistence.
+    # The original unredacted payload is deliberately not stored.
+    safe_log = redact_sensitive_data(request.raw_log)
+
     initial_state = {
-        "raw_log": request.raw_log,
+        "raw_log": safe_log,
         "agent_mode": request.agent_mode,
         "requested_agent_count": request.target_agent_count,
         "is_anomaly": None, "anomaly_reason": None,
