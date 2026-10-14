@@ -96,6 +96,11 @@
     .btn-small { padding: 6px 14px; font-size: 12.5px; }
     .loading { color: #64748b; font-size: 13px; display: none; }
     .error-msg { color: #f87171; font-size: 13px; margin-top: 12px; display: none; }
+    .security-warning {
+        color: #fbbf24; background: #422006; border: 1px solid #78350f;
+        border-radius: 7px; padding: 10px 12px; margin-top: 10px;
+        font-size: 12.5px; line-height: 1.5; display: none;
+    }
 
     .result { margin-top: 32px; display: none; }
     .section-title {
@@ -193,6 +198,9 @@
         <div class="input-panel" id="inputPanel">
             <label class="input-label">Log Input</label>
             <textarea id="logInput" placeholder="e.g. CRITICAL: checkout-service reporting database timeout (30s), memory at 96%, disk I/O latency at 800ms..."></textarea>
+            <div class="security-warning" id="securityWarning" role="alert">
+                Sensitive data detected. Remove passwords, API keys, tokens, or personal email addresses before submitting this log.
+            </div>
             <div class="analysis-options" style="display:flex;gap:16px;align-items:end;margin-top:14px;flex-wrap:wrap;">
                 <label class="input-label" style="margin:0;">Investigation Mode
                     <select id="agentMode" onchange="toggleAgentCount()" style="display:block;margin-top:6px;padding:9px 12px;background:#0b1220;color:#dbeafe;border:1px solid #334155;border-radius:7px;">
@@ -294,6 +302,23 @@
             .replace(/\n/g, "<br>");
     }
 
+    function containsSensitiveData(text) {
+        return [
+            /(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|client[_-]?secret)\s*[=:]\s*\S+/i,
+            /authorization\s*:\s*bearer\s+\S+/i,
+            /\b(?:AKIA|ASIA)[A-Z0-9]{16}\b/i,
+            /\b(?:gsk_|sk-|xox[baprs]-)[A-Za-z0-9_\/-]{12,}\b/i,
+            /\beyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\b/,
+            /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i
+        ].some(pattern => pattern.test(text));
+    }
+
+    function updateSecurityWarning() {
+        const logText = document.getElementById("logInput").value;
+        document.getElementById("securityWarning").style.display =
+            containsSensitiveData(logText) ? "block" : "none";
+    }
+
     function logout() {
         localStorage.removeItem("access_token");
         localStorage.removeItem("username");
@@ -322,9 +347,9 @@
         return "Low estimate";
     }
 
-    function confidenceDisplay(score) {
+    function confidenceDisplay(score, label = "Calibrated estimate") {
         if (typeof score !== "number" || Number.isNaN(score)) return "Not available";
-        return `${(score * 100).toFixed(0)}% · ${confidenceLabel(score)}`;
+        return `${(score * 100).toFixed(0)}% · ${label}`;
     }
 
     function formatDateTime(isoString) {
@@ -433,6 +458,13 @@
             return;
         }
 
+        if (containsSensitiveData(logText)) {
+            errorMsg.textContent = "Remove detected sensitive data before submitting the log.";
+            errorMsg.style.display = "block";
+            updateSecurityWarning();
+            return;
+        }
+
         btn.disabled = true;
         loading.style.display = "inline";
 
@@ -520,19 +552,19 @@
             row.className = "finding-row";
             row.innerHTML = `
                 <div class="finding-angle">${escapeHtml(f.angle)}</div>
-                <div class="finding-text">${escapeHtml(f.finding)} <span class="conf">(model estimate: ${confidenceDisplay(f.confidence)})</span></div>
+                <div class="finding-text">${escapeHtml(f.finding)} <span class="conf">(model estimate: ${confidenceDisplay(f.confidence, "Model estimate")})</span></div>
             `;
             findingsList.appendChild(row);
         });
 
         document.getElementById("rootCause").textContent = data.root_cause;
         const rootBadge = document.getElementById("rootConfidence");
-        rootBadge.textContent = confidenceDisplay(data.root_cause_confidence);
+        rootBadge.textContent = confidenceDisplay(data.root_cause_confidence, "Calibrated estimate");
         rootBadge.className = "confidence-tag " + confidenceClass(data.root_cause_confidence);
 
         document.getElementById("suggestedFix").textContent = data.suggested_fix;
         const fixBadge = document.getElementById("fixConfidence");
-        fixBadge.textContent = confidenceDisplay(data.fix_confidence);
+        fixBadge.textContent = confidenceDisplay(data.fix_confidence, "Calibrated estimate");
         fixBadge.className = "confidence-tag " + confidenceClass(data.fix_confidence);
 
         document.getElementById("reviewFlag").style.display = data.needs_human_review ? "inline-flex" : "none";
@@ -543,6 +575,7 @@
         document.getElementById("resultBox").style.display = "block";
     }
 
+    document.getElementById("logInput").addEventListener("input", updateSecurityWarning);
     loadIncidentList();
 </script>
 </body>

@@ -8,7 +8,7 @@ local development, CI, Docker, and AWS without another service.
 
 import json
 import re
-from typing import Any
+from typing import Any, Iterable
 
 
 _SECRET_PATTERNS = (
@@ -76,6 +76,27 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
         )
 
     return {"angle": angle, "finding": finding.strip(), "confidence": round(confidence, 2)}
+
+
+def calibrate_confidence(
+    model_confidence: float,
+    supporting_confidences: Iterable[float],
+    independent_angle_count: int,
+    risk_penalty: float = 0.0,
+) -> float:
+    """Convert a model estimate into a more conservative workflow score.
+
+    LLM self-reported confidence is not a calibrated probability. This score
+    combines it with investigator agreement and evidence breadth, then applies
+    an optional operational-risk penalty for remediation recommendations.
+    """
+    model = min(max(float(model_confidence), 0.0), 1.0)
+    supporting = [min(max(float(value), 0.0), 1.0) for value in supporting_confidences]
+    agreement = sum(supporting) / len(supporting) if supporting else 0.0
+    breadth = min(max(independent_angle_count, 0) / 3.0, 1.0)
+    calibrated = (0.45 * model) + (0.35 * agreement) + (0.20 * breadth)
+    calibrated -= min(max(float(risk_penalty), 0.0), 0.25)
+    return round(min(max(calibrated, 0.0), 1.0), 2)
 
 
 def _has_evidence_overlap(finding: str, evidence: str) -> bool:

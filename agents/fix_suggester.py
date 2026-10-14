@@ -8,6 +8,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
 from utils.llm_helper import invoke_with_retry
+from utils.guardrails import calibrate_confidence
 
 load_dotenv()
 
@@ -71,8 +72,21 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 
     try:
         parsed = json.loads(raw_output)
-        state["suggested_fix"] = parsed["suggested_fix"]
-        state["fix_confidence"] = float(parsed["confidence"])
+        suggested_fix = parsed["suggested_fix"]
+        model_confidence = float(parsed["confidence"])
+        if not isinstance(suggested_fix, str) or not suggested_fix.strip():
+            raise ValueError("suggested_fix must be a non-empty string")
+        if not 0.0 <= model_confidence <= 1.0:
+            raise ValueError("confidence must be between 0 and 1")
+        state["suggested_fix"] = suggested_fix.strip()
+        # Remediation is scored more conservatively because it can affect a
+        # production system even when the diagnosis looks plausible.
+        state["fix_confidence"] = calibrate_confidence(
+            model_confidence,
+            [root_cause_confidence],
+            max(1, angle_count),
+            risk_penalty=0.05,
+        )
         state["needs_human_review"] = (
             state["fix_confidence"] < CONFIDENCE_THRESHOLD
             or requires_human_review

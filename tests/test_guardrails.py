@@ -1,4 +1,4 @@
-from utils.guardrails import parse_investigator_output, redact_sensitive_data
+from utils.guardrails import calibrate_confidence, parse_investigator_output, redact_sensitive_data
 
 
 def test_redacts_common_credentials_and_personal_data():
@@ -42,3 +42,17 @@ def test_supported_finding_preserves_valid_confidence():
     )
 
     assert finding["confidence"] == 0.84
+
+
+def test_calibration_uses_agreement_and_evidence_breadth():
+    calibrated = calibrate_confidence(0.95, [0.90, 0.80], 2)
+
+    # Two supporting angles should produce a conservative score below the
+    # model's self-reported 95%, rather than displaying it unchanged.
+    assert calibrated == 0.86
+
+
+def test_calibration_penalizes_operational_fix_risk():
+    calibrated = calibrate_confidence(0.95, [0.84], 1, risk_penalty=0.05)
+
+    assert calibrated == 0.74

@@ -9,6 +9,7 @@ from langchain_groq import ChatGroq
 from state import IncidentState
 from vectorstore.retriever import retrieve_similar_patterns
 from utils.llm_helper import invoke_with_retry
+from utils.guardrails import calibrate_confidence
 
 load_dotenv()
 
@@ -77,8 +78,18 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 
     try:
         parsed = json.loads(raw_output)
-        state["root_cause"] = parsed["root_cause"]
-        state["root_cause_confidence"] = float(parsed["confidence"])
+        root_cause = parsed["root_cause"]
+        model_confidence = float(parsed["confidence"])
+        if not isinstance(root_cause, str) or not root_cause.strip():
+            raise ValueError("root_cause must be a non-empty string")
+        if not 0.0 <= model_confidence <= 1.0:
+            raise ValueError("confidence must be between 0 and 1")
+        state["root_cause"] = root_cause.strip()
+        state["root_cause_confidence"] = calibrate_confidence(
+            model_confidence,
+            [finding.get("confidence", 0.0) for finding in findings],
+            len(findings),
+        )
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"[AGGREGATOR AGENT] JSON parse error: {e}")
         state["root_cause"] = "Root-cause aggregation failed because the LLM response could not be parsed."
