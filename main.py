@@ -9,10 +9,11 @@ so local OAuth uses the same origin as the API.
 import os
 import uuid
 import random
+import json
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.security import OAuth2PasswordBearer
 from pydantic import BaseModel, Field
@@ -231,28 +232,7 @@ def health_check():
 
 @app.post("/analyze")
 def analyze_incident(request: LogRequest, current_user: dict = Depends(get_current_user)):
-    if request.agent_mode == "load_test" and request.target_agent_count is None:
-        raise HTTPException(
-            status_code=422,
-            detail="target_agent_count is required when agent_mode is load_test",
-        )
-
-    # Sanitize before the log reaches LangGraph, Groq, RAG, or persistence.
-    # The original unredacted payload is deliberately not stored.
-    safe_log = redact_sensitive_data(request.raw_log)
-
-    initial_state = {
-        "raw_log": safe_log,
-        "agent_mode": request.agent_mode,
-        "requested_agent_count": request.target_agent_count,
-        "is_anomaly": None, "anomaly_reason": None,
-        "investigation_angles": None, "investigation_findings": [],
-        "root_cause": None, "root_cause_confidence": None,
-        "suggested_fix": None, "fix_confidence": None,
-        "needs_human_review": None, "final_report": None
-    }
-
-    result = get_graph_app().invoke(initial_state)
+    result = get_graph_app().invoke(build_initial_state(request))
 
     incident_id = str(uuid.uuid4())
     save_incident(incident_id, current_user["user_id"], result)
@@ -270,6 +250,126 @@ def analyze_incident(request: LogRequest, current_user: dict = Depends(get_curre
         "needs_human_review": result["needs_human_review"],
         "final_report": result["final_report"]
     }
+
+
+def build_initial_state(request: LogRequest) -> dict:
+    """Validate mode-specific input and create a sanitized graph state."""
+    if request.agent_mode == "load_test" and request.target_agent_count is None:
+        raise HTTPException(
+            status_code=422,
+            detail="target_agent_count is required when agent_mode is load_test",
+        )
+
+    # Sanitize before the log reaches LangGraph, Groq, RAG, or persistence.
+    # The original unredacted payload is deliberately not stored.
+    safe_log = redact_sensitive_data(request.raw_log)
+    return {
+        "raw_log": safe_log,
+        "agent_mode": request.agent_mode,
+        "requested_agent_count": request.target_agent_count,
+        "is_anomaly": None, "anomaly_reason": None,
+        "investigation_angles": None, "investigation_findings": [],
+        "root_cause": None, "root_cause_confidence": None,
+        "suggested_fix": None, "fix_confidence": None,
+        "needs_human_review": None, "final_report": None
+    }
+
+
+def _sse_event(payload: dict) -> str:
+    """Encode one browser-friendly Server-Sent Event."""
+    return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _stage_event(node: str, update: dict) -> dict:
+    """Translate a LangGraph node update into safe progress text."""
+    messages = {
+        "log_monitor": "Detection agent is checking the submitted log for anomalies.",
+        "orchestrator": "Orchestrator is grouping independent investigation hypotheses.",
+        "aggregator": "Aggregator is comparing investigator evidence and forming a root-cause hypothesis.",
+        "fix_suggester": "Remediation agent is evaluating a safe, reviewable recommendation.",
+        "report_writer": "Documentation agent is preparing the incident report.",
+    }
+    if node == "investigator":
+        findings = update.get("investigation_findings") or []
+        angle = findings[0].get("angle", "unknown angle") if findings else "unknown angle"
+        return {
+            "type": "investigator",
+            "stage": "investigator",
+            "message": f"Investigator completed: {angle}.",
+            "angle": angle,
+        }
+    return {
+        "type": "stage",
+        "stage": node,
+        "message": messages.get(node, f"{node.replace('_', ' ').title()} is running."),
+    }
+
+
+@app.post("/analyze/stream")
+def stream_analysis(request: LogRequest, current_user: dict = Depends(get_current_user)):
+    """Run the real graph while streaming stage updates to the browser."""
+    initial_state = build_initial_state(request)
+
+    def event_generator():
+        current_state = dict(initial_state)
+        current_state["investigation_findings"] = []
+        yield _sse_event({
+            "type": "start",
+            "stage": "started",
+            "message": "Analysis started. Preparing the autonomous investigation pipeline.",
+        })
+
+        try:
+            # LangGraph emits one update as each node completes, including each
+            # parallel investigator. No fake progress is generated here.
+            for update in get_graph_app().stream(initial_state, stream_mode="updates"):
+                for node, node_update in update.items():
+                    if not isinstance(node_update, dict):
+                        continue
+                    if node == "investigator":
+                        current_state["investigation_findings"].extend(
+                            node_update.get("investigation_findings") or []
+                        )
+                    current_state.update({
+                        key: value
+                        for key, value in node_update.items()
+                        if key != "investigation_findings"
+                    })
+                    yield _sse_event(_stage_event(node, node_update))
+
+            incident_id = str(uuid.uuid4())
+            save_incident(incident_id, current_user["user_id"], current_state)
+            yield _sse_event({
+                "type": "complete",
+                "stage": "complete",
+                "message": "Analysis complete.",
+                "result": {
+                    "id": incident_id,
+                    "is_anomaly": current_state["is_anomaly"],
+                    "anomaly_reason": current_state["anomaly_reason"],
+                    "investigation_angles": current_state["investigation_angles"],
+                    "investigation_findings": current_state["investigation_findings"],
+                    "root_cause": current_state["root_cause"],
+                    "root_cause_confidence": current_state["root_cause_confidence"],
+                    "suggested_fix": current_state["suggested_fix"],
+                    "fix_confidence": current_state["fix_confidence"],
+                    "needs_human_review": current_state["needs_human_review"],
+                    "final_report": current_state["final_report"],
+                },
+            })
+        except Exception as exc:
+            print(f"[STREAM] Analysis failed: {exc}")
+            yield _sse_event({
+                "type": "error",
+                "stage": "error",
+                "message": "Analysis failed. Check the service logs for details.",
+            })
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/incidents")

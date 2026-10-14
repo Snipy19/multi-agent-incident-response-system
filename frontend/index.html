@@ -96,6 +96,14 @@
     .btn-small { padding: 6px 14px; font-size: 12.5px; }
     .loading { color: #64748b; font-size: 13px; display: none; }
     .error-msg { color: #f87171; font-size: 13px; margin-top: 12px; display: none; }
+    .progress-panel {
+        display: none; margin-top: 16px; padding: 14px 16px; border-radius: 8px;
+        background: #0b1220; border: 1px solid #1e3a5f;
+    }
+    .progress-title { color: #93c5fd; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; }
+    .progress-list { list-style: none; margin-top: 9px; display: grid; gap: 6px; }
+    .progress-list li { color: #94a3b8; font-size: 12.5px; line-height: 1.4; }
+    .progress-list li::before { content: "●"; color: #38bdf8; margin-right: 8px; }
     .security-warning {
         color: #fbbf24; background: #422006; border: 1px solid #78350f;
         border-radius: 7px; padding: 10px 12px; margin-top: 10px;
@@ -216,6 +224,10 @@
                 <button id="analyzeBtn" onclick="analyzeLog()">Run Analysis</button>
                 <button class="btn-secondary" id="newBtnTop" onclick="resetToNew()" style="display:none;">New Analysis</button>
                 <span class="loading" id="loadingMsg">Agents investigating &mdash; this may take 20&ndash;60s depending on complexity...</span>
+            </div>
+            <div class="progress-panel" id="progressPanel">
+                <div class="progress-title">Live pipeline activity</div>
+                <ul class="progress-list" id="progressList"></ul>
             </div>
             <div class="error-msg" id="errorMsg"></div>
         </div>
@@ -435,7 +447,7 @@
     }
 
     // ---------- ANALYZE ----------
-    // This request waits for the current synchronous graph run to finish.
+    // The backend streams real LangGraph node completions over Server-Sent Events.
 
     function toggleAgentCount() {
         const loadTest = document.getElementById("agentMode").value === "load_test";
@@ -448,6 +460,8 @@
         const loading = document.getElementById("loadingMsg");
         const errorMsg = document.getElementById("errorMsg");
         const resultBox = document.getElementById("resultBox");
+        const progressPanel = document.getElementById("progressPanel");
+        const progressList = document.getElementById("progressList");
 
         errorMsg.style.display = "none";
         resultBox.style.display = "none";
@@ -467,12 +481,14 @@
 
         btn.disabled = true;
         loading.style.display = "inline";
+        progressPanel.style.display = "block";
+        progressList.innerHTML = "";
 
         const agentMode = document.getElementById("agentMode").value;
         const targetAgentCount = Number(document.getElementById("targetAgentCount").value);
 
         try {
-            const response = await fetch(`${API_BASE}/analyze`, {
+            const response = await fetch(`${API_BASE}/analyze/stream`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...authHeaders() },
                 body: JSON.stringify({
@@ -484,12 +500,39 @@
 
             if (handleAuthError(response)) return;
             if (!response.ok) throw new Error(`Server returned ${response.status}`);
+            if (!response.body) throw new Error("Streaming is not supported by this browser");
 
-            const data = await response.json();
-            activeIncidentId = data.id;
-            renderResult(data);
-            loadIncidentList();
-            document.getElementById("newBtnTop").style.display = "inline-block";
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = "";
+            let completed = false;
+            while (true) {
+                const { value, done } = await reader.read();
+                buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+                const events = buffer.split("\n\n");
+                buffer = events.pop() || "";
+                for (const eventText of events) {
+                    const dataLine = eventText.split("\n").find(line => line.startsWith("data: "));
+                    if (!dataLine) continue;
+                    const event = JSON.parse(dataLine.slice(6));
+                    if (event.type === "error") throw new Error(event.message);
+                    if (event.message) {
+                        const item = document.createElement("li");
+                        item.textContent = event.message;
+                        progressList.appendChild(item);
+                        progressList.scrollTop = progressList.scrollHeight;
+                    }
+                    if (event.type === "complete") {
+                        completed = true;
+                        activeIncidentId = event.result.id;
+                        renderResult(event.result);
+                        loadIncidentList();
+                        document.getElementById("newBtnTop").style.display = "inline-block";
+                    }
+                }
+                if (done) break;
+            }
+            if (!completed) throw new Error("The analysis stream ended before completion");
 
         } catch (err) {
             errorMsg.textContent = "Error: " + err.message + " - confirm the backend is running on port 8000.";
