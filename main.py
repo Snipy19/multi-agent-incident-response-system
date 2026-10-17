@@ -232,7 +232,11 @@ def health_check():
 
 @app.post("/analyze")
 def analyze_incident(request: LogRequest, current_user: dict = Depends(get_current_user)):
-    result = get_graph_app().invoke(build_initial_state(request))
+    # Validate the request before importing the expensive graph/RAG stack.
+    # This keeps invalid API requests fast and prevents CI validation tests
+    # from loading the embedding model unnecessarily.
+    initial_state = build_initial_state(request)
+    result = get_graph_app().invoke(initial_state)
 
     incident_id = str(uuid.uuid4())
     save_incident(incident_id, current_user["user_id"], result)
