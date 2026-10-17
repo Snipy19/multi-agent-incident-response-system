@@ -270,7 +270,7 @@
 
             <div class="section-title">Full Report</div>
             <div class="report-box" id="fullReport"></div>
-            <div class="report-note">Confidence values are model estimates based on the submitted log and retrieved patterns—not calibrated probabilities. Validate recommendations before making production changes.</div>
+            <div class="report-note">Certainty is an evidence-based model judgment, not a statistical probability. Validate recommendations before making production changes.</div>
 
             <div class="result-bottom-actions">
                 <button onclick="resetToNew()">Start New Analysis</button>
@@ -359,7 +359,7 @@
         return "Low estimate";
     }
 
-    function confidenceDisplay(score, label = "Calibrated estimate") {
+    function confidenceDisplay(score, label = "Model estimate") {
         if (typeof score !== "number" || Number.isNaN(score)) return "Not available";
         return `${(score * 100).toFixed(0)}% · ${label}`;
     }
@@ -595,19 +595,19 @@
             row.className = "finding-row";
             row.innerHTML = `
                 <div class="finding-angle">${escapeHtml(f.angle)}</div>
-                <div class="finding-text">${escapeHtml(f.finding)} <span class="conf">(model estimate: ${confidenceDisplay(f.confidence, "Model estimate")})</span></div>
+                <div class="finding-text">${escapeHtml(f.finding)} <span class="conf">(${escapeHtml(f.certainty || "Inconclusive")}; ${confidenceDisplay(f.confidence)})</span></div>
             `;
             findingsList.appendChild(row);
         });
 
         document.getElementById("rootCause").textContent = data.root_cause;
         const rootBadge = document.getElementById("rootConfidence");
-        rootBadge.textContent = confidenceDisplay(data.root_cause_confidence, "Calibrated estimate");
+        rootBadge.textContent = `${data.root_cause_certainty || "Inconclusive"} · ${confidenceDisplay(data.root_cause_confidence)}`;
         rootBadge.className = "confidence-tag " + confidenceClass(data.root_cause_confidence);
 
         document.getElementById("suggestedFix").textContent = data.suggested_fix;
         const fixBadge = document.getElementById("fixConfidence");
-        fixBadge.textContent = confidenceDisplay(data.fix_confidence, "Calibrated estimate");
+        fixBadge.textContent = `${data.fix_certainty || "Inconclusive"} · ${confidenceDisplay(data.fix_confidence)}`;
         fixBadge.className = "confidence-tag " + confidenceClass(data.fix_confidence);
 
         document.getElementById("reviewFlag").style.display = data.needs_human_review ? "inline-flex" : "none";

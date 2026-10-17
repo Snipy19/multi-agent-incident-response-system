@@ -249,8 +249,15 @@ def analyze_incident(request: LogRequest, current_user: dict = Depends(get_curre
         "investigation_findings": result["investigation_findings"],
         "root_cause": result["root_cause"],
         "root_cause_confidence": result["root_cause_confidence"],
+        "root_cause_certainty": result.get("root_cause_certainty"),
+        "root_cause_evidence": result.get("root_cause_evidence", []),
+        "root_cause_missing_evidence": result.get("root_cause_missing_evidence", []),
+        "root_cause_alternatives": result.get("root_cause_alternatives", []),
         "suggested_fix": result["suggested_fix"],
         "fix_confidence": result["fix_confidence"],
+        "fix_certainty": result.get("fix_certainty"),
+        "fix_evidence": result.get("fix_evidence", []),
+        "fix_missing_evidence": result.get("fix_missing_evidence", []),
         "needs_human_review": result["needs_human_review"],
         "final_report": result["final_report"]
     }
@@ -274,7 +281,10 @@ def build_initial_state(request: LogRequest) -> dict:
         "is_anomaly": None, "anomaly_reason": None,
         "investigation_angles": None, "investigation_findings": [],
         "root_cause": None, "root_cause_confidence": None,
+        "root_cause_certainty": None, "root_cause_evidence": [],
+        "root_cause_missing_evidence": [], "root_cause_alternatives": [],
         "suggested_fix": None, "fix_confidence": None,
+        "fix_certainty": None, "fix_evidence": [], "fix_missing_evidence": [],
         "needs_human_review": None, "final_report": None
     }
 
@@ -355,8 +365,15 @@ def stream_analysis(request: LogRequest, current_user: dict = Depends(get_curren
                     "investigation_findings": current_state["investigation_findings"],
                     "root_cause": current_state["root_cause"],
                     "root_cause_confidence": current_state["root_cause_confidence"],
+                    "root_cause_certainty": current_state.get("root_cause_certainty"),
+                    "root_cause_evidence": current_state.get("root_cause_evidence", []),
+                    "root_cause_missing_evidence": current_state.get("root_cause_missing_evidence", []),
+                    "root_cause_alternatives": current_state.get("root_cause_alternatives", []),
                     "suggested_fix": current_state["suggested_fix"],
                     "fix_confidence": current_state["fix_confidence"],
+                    "fix_certainty": current_state.get("fix_certainty"),
+                    "fix_evidence": current_state.get("fix_evidence", []),
+                    "fix_missing_evidence": current_state.get("fix_missing_evidence", []),
                     "needs_human_review": current_state["needs_human_review"],
                     "final_report": current_state["final_report"],
                 },

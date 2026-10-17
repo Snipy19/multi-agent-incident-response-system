@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
 from utils.llm_helper import invoke_with_retry
-from utils.guardrails import calibrate_confidence
+from utils.guardrails import CERTAINTY_LEVELS
 
 load_dotenv()
 
@@ -41,6 +41,9 @@ def fix_suggester_agent(state: IncidentState) -> IncidentState:
         print(f"[FIX SUGGESTER AGENT] Confidence is too low ({root_cause_confidence}); human review is required")
         state["suggested_fix"] = "No remediation was recommended because confidence was too low."
         state["fix_confidence"] = 0.0
+        state["fix_certainty"] = "Inconclusive"
+        state["fix_evidence"] = []
+        state["fix_missing_evidence"] = ["A sufficiently supported root cause"]
         state["needs_human_review"] = True
         return {k: v for k, v in state.items() if k != "investigation_findings"}
 
@@ -51,18 +54,18 @@ def fix_suggester_agent(state: IncidentState) -> IncidentState:
 Root cause:
 "{root_cause}"
 
-Confidence rubric:
-- 0.90-1.00: the remediation directly addresses a well-supported cause and has low operational risk
-- 0.75-0.89: actionable recommendation, but validation or missing environment details remain
-- 0.50-0.74: useful hypothesis that needs significant engineering review
-- below 0.50: do not recommend applying automatically
-Do not default to a familiar rounded value such as 0.85 or 0.92. Score the
-recommendation's evidence and operational safety using two decimal places.
+Do not present a numeric score as a calibrated probability. Select one certainty
+level exactly: Confirmed, Strong hypothesis, or Inconclusive. A fix is never
+confirmed merely because the diagnosis is plausible; say what must be validated
+before applying it and avoid destructive or irreversible actions.
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{
     "suggested_fix": "a concise, specific, actionable fix (2-3 sentences)",
-    "confidence": 0.0 to 1.0
+    "confidence": 0.0 to 1.0,
+    "certainty": "Confirmed | Strong hypothesis | Inconclusive",
+    "supporting_evidence": ["facts supporting why this fix addresses the issue"],
+    "missing_evidence": ["validation required before applying the fix"]
 }}"""
 
     response = invoke_with_retry(llm, prompt)
@@ -79,14 +82,13 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         if not 0.0 <= model_confidence <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
         state["suggested_fix"] = suggested_fix.strip()
-        # Remediation is scored more conservatively because it can affect a
-        # production system even when the diagnosis looks plausible.
-        state["fix_confidence"] = calibrate_confidence(
-            model_confidence,
-            [root_cause_confidence],
-            max(1, angle_count),
-            risk_penalty=0.05,
-        )
+        certainty = parsed.get("certainty", "Inconclusive")
+        if certainty not in CERTAINTY_LEVELS:
+            certainty = "Inconclusive"
+        state["fix_confidence"] = round(model_confidence, 2)
+        state["fix_certainty"] = certainty
+        state["fix_evidence"] = parsed.get("supporting_evidence", [])
+        state["fix_missing_evidence"] = parsed.get("missing_evidence", [])
         state["needs_human_review"] = (
             state["fix_confidence"] < CONFIDENCE_THRESHOLD
             or requires_human_review

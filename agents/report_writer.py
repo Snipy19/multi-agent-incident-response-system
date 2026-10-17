@@ -37,9 +37,14 @@ Here is all the information about this incident:
 - Anomaly detected: {state['is_anomaly']}
 - Anomaly reason: "{state['anomaly_reason']}"
 - Root cause: "{state['root_cause']}"
-- Root cause confidence: {state['root_cause_confidence']}
+- Root cause certainty: {state.get('root_cause_certainty', 'Inconclusive')}
+- Root cause supporting evidence: {state.get('root_cause_evidence', [])}
+- Root cause missing evidence: {state.get('root_cause_missing_evidence', [])}
+- Root cause alternatives: {state.get('root_cause_alternatives', [])}
 - Suggested fix: "{state['suggested_fix']}"
-- Fix confidence: {state['fix_confidence']}
+- Fix certainty: {state.get('fix_certainty', 'Inconclusive')}
+- Fix supporting evidence: {state.get('fix_evidence', [])}
+- Fix missing evidence: {state.get('fix_missing_evidence', [])}
 - Needs human review: {state['needs_human_review']}
 
 Write a clean, professional incident report with these sections:
@@ -54,6 +59,8 @@ STRICT RULES:
 - The fix is a RECOMMENDATION only. Do NOT say it was applied, that the incident
   was resolved, or that any action has already been taken.
 - If a detail is not provided, leave it out instead of guessing.
+- Explicitly distinguish confirmed facts, strong hypotheses, and inconclusive
+  possibilities. Include missing validation and alternatives when supplied.
 - Do NOT add a "prepared by" line.
 
 Keep it concise but professional, as if it will be read by an engineering team."""

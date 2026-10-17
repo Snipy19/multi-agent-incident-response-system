@@ -10,6 +10,8 @@ import json
 import re
 from typing import Any, Iterable
 
+CERTAINTY_LEVELS = {"Confirmed", "Strong hypothesis", "Inconclusive"}
+
 
 _SECRET_PATTERNS = (
     # Common bearer credentials and cloud/API key formats.
@@ -49,6 +51,10 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
         "angle": angle,
         "finding": f"{angle} analysis was inconclusive because the model response was invalid.",
         "confidence": 0.0,
+        "certainty": "Inconclusive",
+        "supporting_evidence": [],
+        "missing_evidence": ["A valid investigator response"],
+        "alternatives": [],
     }
 
     try:
@@ -75,7 +81,24 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
             f"{angle} conclusion. Model note: {finding}"
         )
 
-    return {"angle": angle, "finding": finding.strip(), "confidence": round(confidence, 2)}
+    certainty = parsed.get("certainty", "Inconclusive")
+    if certainty not in CERTAINTY_LEVELS:
+        certainty = "Inconclusive"
+
+    def clean_list(value: Any) -> list[str]:
+        if not isinstance(value, list):
+            return []
+        return [item.strip() for item in value if isinstance(item, str) and item.strip()][:5]
+
+    return {
+        "angle": angle,
+        "finding": finding.strip(),
+        "confidence": round(confidence, 2),
+        "certainty": certainty,
+        "supporting_evidence": clean_list(parsed.get("supporting_evidence")),
+        "missing_evidence": clean_list(parsed.get("missing_evidence")),
+        "alternatives": clean_list(parsed.get("alternatives")),
+    }
 
 
 def calibrate_confidence(

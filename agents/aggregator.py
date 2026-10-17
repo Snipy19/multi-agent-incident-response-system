@@ -9,7 +9,7 @@ from langchain_groq import ChatGroq
 from state import IncidentState
 from vectorstore.retriever import retrieve_similar_patterns
 from utils.llm_helper import invoke_with_retry
-from utils.guardrails import calibrate_confidence
+from utils.guardrails import CERTAINTY_LEVELS
 
 load_dotenv()
 
@@ -57,18 +57,20 @@ Similar patterns observed in real production systems in the past (for reference 
 Synthesize these findings into ONE unified root cause explanation. Identify
 which finding(s) are most likely the PRIMARY cause versus contributing/secondary factors.
 
-Confidence rubric:
-- 0.90-1.00: the primary cause is directly supported by multiple independent findings
-- 0.75-0.89: strongly supported, but important confirmation is still missing
-- 0.50-0.74: plausible competing explanations remain
-- below 0.50: insufficient evidence for a reliable root cause
-Do not default to 0.85, 0.90, 0.92, or 0.93. Use two decimal places and reflect
-the uncertainty caused by missing metrics, traces, configuration, and live validation.
+Do not present a numeric score as a calibrated probability. Select one certainty
+level exactly: Confirmed, Strong hypothesis, or Inconclusive. Confirmed requires
+direct evidence in the submitted log; otherwise name what is missing and keep
+the result as a hypothesis. Include plausible alternatives instead of hiding
+uncertainty.
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{
     "root_cause": "a clear 2-3 sentence unified root cause, mentioning primary vs secondary factors if relevant",
-    "confidence": 0.0 to 1.0
+    "confidence": 0.0 to 1.0,
+    "certainty": "Confirmed | Strong hypothesis | Inconclusive",
+    "supporting_evidence": ["specific evidence from the log or investigator findings"],
+    "missing_evidence": ["the most important validation still required"],
+    "alternatives": ["a plausible competing explanation"]
 }}"""
 
     response = invoke_with_retry(llm, prompt)
@@ -85,15 +87,22 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         if not 0.0 <= model_confidence <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
         state["root_cause"] = root_cause.strip()
-        state["root_cause_confidence"] = calibrate_confidence(
-            model_confidence,
-            [finding.get("confidence", 0.0) for finding in findings],
-            len(findings),
-        )
+        certainty = parsed.get("certainty", "Inconclusive")
+        if certainty not in CERTAINTY_LEVELS:
+            certainty = "Inconclusive"
+        state["root_cause_confidence"] = round(model_confidence, 2)
+        state["root_cause_certainty"] = certainty
+        state["root_cause_evidence"] = parsed.get("supporting_evidence", [])
+        state["root_cause_missing_evidence"] = parsed.get("missing_evidence", [])
+        state["root_cause_alternatives"] = parsed.get("alternatives", [])
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"[AGGREGATOR AGENT] JSON parse error: {e}")
         state["root_cause"] = "Root-cause aggregation failed because the LLM response could not be parsed."
         state["root_cause_confidence"] = 0.0
+        state["root_cause_certainty"] = "Inconclusive"
+        state["root_cause_evidence"] = []
+        state["root_cause_missing_evidence"] = ["A valid aggregator response"]
+        state["root_cause_alternatives"] = []
 
     print(f"[AGGREGATOR AGENT] Final root cause: {state['root_cause']} (confidence: {state['root_cause_confidence']})")
 
