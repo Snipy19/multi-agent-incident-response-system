@@ -7,6 +7,11 @@ groq==0.37.1
 langgraph==1.2.11
 langchain-core==1.6.2
 langchain-groq==1.1.3
+
+# CI and local development use CPU-only PyTorch. Without this explicit wheel,
+# pip may resolve a much larger NVIDIA CUDA build even on CPU runners.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.14.0+cpu
 sentence-transformers==6.1.0
 faiss-cpu==1.15.1
 pandas==3.0.6
