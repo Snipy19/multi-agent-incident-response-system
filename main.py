@@ -162,6 +162,12 @@ def google_login(request: GoogleLoginRequest):
             request.id_token,
             google_requests.Request(),
             client_id,
+            # Small tolerance for normal host/container clock drift. Issuer,
+            # audience, signature, and expiry validation remain enabled.
+            clock_skew_in_seconds=min(
+                max(int(os.getenv("GOOGLE_CLOCK_SKEW_SECONDS", "5")), 0),
+                30,
+            ),
         )
     except ValueError as exc:
         # Keep token contents out of logs, but record the verifier reason for
