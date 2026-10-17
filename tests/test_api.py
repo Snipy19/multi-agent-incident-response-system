@@ -46,6 +46,21 @@ def test_health_endpoint_is_public(api_client: TestClient):
     assert response.json()["status"] == "ok"
 
 
+def test_google_config_uses_backend_environment(api_client, monkeypatch):
+    """The browser must receive the same client ID used by token verification."""
+    monkeypatch.setenv(
+        "GOOGLE_CLIENT_ID",
+        "real-client-id.apps.googleusercontent.com",
+    )
+    response = api_client.get("/auth/google/config")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "client_id": "real-client-id.apps.googleusercontent.com",
+    }
+
+
 def test_signup_and_login_use_real_authentication(api_client: TestClient):
     """Signup creates a user and login returns a usable bearer token."""
     create_account(api_client, "alice", "alice@example.com")

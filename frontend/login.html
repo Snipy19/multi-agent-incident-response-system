@@ -86,7 +86,6 @@
     const API_BASE = window.location.port === "8000"
         ? window.location.origin
         : "http://127.0.0.1:8000";
-    const GOOGLE_CLIENT_ID = "647599107950-qdn3eek122ano8dmj1d1lpj5569v7ibc.apps.googleusercontent.com";
     let mode = "login";
 
     function toggleMode() {
@@ -178,15 +177,29 @@
         });
     }
 
-    window.onload = function() {
-        google.accounts.id.initialize({
-            client_id: GOOGLE_CLIENT_ID,
-            callback: handleGoogleLogin
-        });
-        google.accounts.id.renderButton(
-            document.getElementById("googleSignInDiv"),
-            { theme: "outline", size: "large", width: 300 }
-        );
+    window.onload = async function() {
+        const errorMsg = document.getElementById("errorMsg");
+        try {
+            const configResponse = await fetch(`${API_BASE}/auth/google/config`);
+            const config = await configResponse.json();
+            if (!config.enabled || !config.client_id) {
+                document.getElementById("googleSignInDiv").style.display = "none";
+                document.querySelector(".divider").style.display = "none";
+                return;
+            }
+
+            google.accounts.id.initialize({
+                client_id: config.client_id,
+                callback: handleGoogleLogin
+            });
+            google.accounts.id.renderButton(
+                document.getElementById("googleSignInDiv"),
+                { theme: "outline", size: "large", width: 300 }
+            );
+        } catch (err) {
+            errorMsg.textContent = "Google sign-in is temporarily unavailable.";
+            errorMsg.style.display = "block";
+        }
     };
 </script>
 </body>

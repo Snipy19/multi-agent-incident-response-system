@@ -144,15 +144,29 @@ def login(request: LoginRequest):
 
 # ---------- AUTH ENDPOINT (Google) ----------
 
+@app.get("/auth/google/config")
+def google_config():
+    """Expose only the public Google client ID needed by GIS in the browser."""
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    return {"enabled": bool(client_id), "client_id": client_id or None}
+
 @app.post("/auth/google")
 def google_login(request: GoogleLoginRequest):
+    client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
+    if not client_id:
+        print("[AUTH] Google sign-in rejected: GOOGLE_CLIENT_ID is not configured")
+        raise HTTPException(status_code=503, detail="Google sign-in is not configured")
+
     try:
         idinfo = google_id_token.verify_oauth2_token(
             request.id_token,
             google_requests.Request(),
-            os.getenv("GOOGLE_CLIENT_ID")
+            client_id,
         )
-    except ValueError:
+    except ValueError as exc:
+        # Keep token contents out of logs, but record the verifier reason for
+        # diagnosing audience, issuer, expiry, or malformed-token problems.
+        print(f"[AUTH] Google token verification failed: {exc}")
         raise HTTPException(status_code=401, detail="Invalid Google token")
 
     google_id = idinfo["sub"]
