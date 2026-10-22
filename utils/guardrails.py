@@ -38,6 +38,18 @@ _GENERATED_REPORT_MARKERS = (
     re.compile(r"(?im)^\s*(?:#\s*)?investigation\s+findings\s*$"),
     re.compile(r"(?im)^\s*(?:#\s*)?root\s+cause\s+(?:assessment|analysis)\s*$"),
 )
+_SERVICE_HOST = re.compile(r"\b[a-z0-9][a-z0-9.-]*\.(?:internal|local|svc|cluster\.local)\b", re.IGNORECASE)
+
+
+def _find_database_host(text: str):
+    return next(
+        (
+            match
+            for match in _SERVICE_HOST.finditer(text)
+            if re.search(r"(?:db|database)", match.group(0), re.IGNORECASE)
+        ),
+        None,
+    )
 
 
 def redact_sensitive_data(raw_log: str) -> str:
@@ -112,14 +124,15 @@ def constrain_cross_service_causality(root_cause: str, raw_log: str) -> tuple[st
     conclusion = clean_model_text(root_cause).strip()
     log = raw_log.casefold()
     text = conclusion.casefold()
-    if not all(term in log for term in ("dns", "db-primary", "redis", "kafka")):
+    database_host = _find_database_host(log)
+    if not database_host or not all(term in log for term in ("dns", "redis", "kafka")):
         return conclusion, False
     if not _unsupported_dns_service_link(text, log):
         return conclusion, False
 
     guarded = (
         "The log directly confirms intermittent DNS lookup failures for "
-        "db-primary.internal and PostgreSQL connection timeouts, making a "
+        f"{database_host.group(0)} and PostgreSQL connection timeouts, making a "
         "database-connectivity issue a strong hypothesis. Redis latency and "
         "Kafka lag are observed concurrent symptoms, but the submitted log "
         "does not establish that DNS caused them; their relationship requires "
@@ -133,7 +146,7 @@ def _unsupported_dns_service_link(claim: str, log: str) -> bool:
     causal = any(term in claim for term in ("caused", "causing", "exacerbated", "due to", "same dns", "dns instability"))
     if "dns" not in claim or not causal:
         return False
-    targets = [target for target in ("redis", "kafka", "consumer lag") if target in claim]
+    targets = [target for target in ("redis", "kafka", "consumer lag", "downstream") if target in claim]
     if not targets:
         return False
     # A direct link requires DNS and the target to appear in the same log
@@ -150,7 +163,7 @@ def constrain_investigator_causality(finding: str, evidence: str, angle: str) ->
     """Downgrade an investigator claim when its cross-service link is unproven."""
     claim = clean_model_text(finding).strip()
     log = str(evidence or "").casefold()
-    if not all(term in log for term in ("dns", "db-primary")):
+    if "dns" not in log or not _find_database_host(log):
         return claim, False
     if not _unsupported_dns_service_link(claim.casefold(), log):
         return claim, False
@@ -172,9 +185,12 @@ def constrain_dns_remediation(suggested_fix: str, raw_log: str) -> tuple[str, bo
     if not dns_change or resolver_evidence:
         return recommendation, False
 
+    database_host = _find_database_host(raw_log)
+    host = database_host.group(0) if database_host else "the database endpoint"
+
     guarded = (
         "First validate DNS query failure rates, resolver health, and resolution "
-        "of db-primary.internal from the checkout-api pods. Check database "
+        f"of {host} from the checkout-api pods. Check database "
         "reachability and correlate the timing with Redis and Kafka metrics. "
         "Only if resolver-side failures are confirmed should the team evaluate "
         "a DNS configuration or caching change; this log alone does not justify "

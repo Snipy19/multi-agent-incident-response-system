@@ -120,6 +120,23 @@ def test_investigator_cannot_link_dns_to_separate_kafka_symptom():
     assert "not sufficient to establish" in finding
 
 
+def test_database_hostname_is_extracted_for_dns_guardrails():
+    root_cause, guarded = constrain_cross_service_causality(
+        "The same DNS instability caused Redis and Kafka failures.",
+        "DNS lookups for orders-db.internal failed. Redis reads were slow. Kafka lag increased.",
+    )
+    fix, fix_guarded = constrain_dns_remediation(
+        "Add a CoreDNS cache.",
+        "DNS lookups for orders-db.internal intermittently failed.",
+    )
+
+    assert guarded is True
+    assert "orders-db.internal" in root_cause
+    assert fix_guarded is True
+    assert "orders-db.internal" in fix
+    assert "db-primary.internal" not in fix
+
+
 def test_calibration_uses_agreement_and_evidence_breadth():
     calibrated = calibrate_confidence(0.95, [0.90, 0.80], 2)
 
