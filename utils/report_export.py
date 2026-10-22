@@ -176,8 +176,8 @@ def _methodology(incident):
     n = _agent_count(incident)
     plural = "s" if n != 1 else ""
     pipeline = (
-        "This report was produced by an automated multi-agent pipeline. A detection agent screens the log entry, "
-        f"an orchestrator selects the investigation angles, {n} specialist agent{plural} investigate in parallel "
+        "This report was produced by an automated multi-agent pipeline. A triage planner screens the log entry and "
+        f"selects the investigation angles, {n} specialist agent{plural} investigate in parallel "
         "(each also consulting a reference knowledge base of historical log patterns), an aggregator reconciles "
         "their findings into a single root cause, and a remediation agent proposes a fix."
     )

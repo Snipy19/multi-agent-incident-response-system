@@ -2,8 +2,8 @@
 LANGGRAPH WORKFLOW
 ------------------
 The workflow follows this sequence:
-1. Detect whether the submitted log describes an anomaly.
-2. Route anomalies to the orchestrator for grounded investigation planning.
+1. Detect whether the submitted log describes an anomaly and plan investigation angles.
+2. Route anomalies to the dynamic investigator fan-out.
 3. Fan out one investigator per selected angle.
 4. Aggregate findings, recommend a fix, and write the final report.
 """
@@ -11,8 +11,7 @@ The workflow follows this sequence:
 from langgraph.graph import StateGraph, END
 from langgraph.types import Send
 from state import IncidentState
-from agents.log_monitor import log_monitor_agent
-from agents.orchestrator import orchestrator_agent
+from agents.triage_planner import triage_planner_agent
 from agents.investigator import investigator_agent
 from agents.aggregator import aggregator_agent
 from agents.fix_suggester import fix_suggester_agent
@@ -20,22 +19,27 @@ from agents.report_writer import report_writer_agent
 from utils.evidence import build_focus_log
 
 
-def route_after_log_monitor(state: IncidentState) -> str:
+def route_after_triage(state: IncidentState) -> str:
     # This conditional edge prevents normal logs from triggering expensive
     # orchestration and investigation calls.
     if state["is_anomaly"]:
-        print("[ROUTER] Anomaly detected; routing to the orchestrator")
+        print("[ROUTER] Anomaly detected; routing to investigators")
         return "continue"
     else:
         print("[ROUTER] No anomaly detected; ending the workflow")
         return "stop"
 
 
+def investigation_router(state: IncidentState) -> IncidentState:
+    """Pass state to the Send-based fan-out after anomaly routing."""
+    return state
+
+
 def spawn_investigators(state: IncidentState):
     """
     Core function for dynamic investigator spawning.
 
-    The orchestrator selects a dynamic list of independent investigation
+    The triage planner selects a dynamic list of independent investigation
     angles (for example, ["Database", "Network", "Queueing"]).
 
     This function creates one Send() object for each angle.
@@ -63,30 +67,30 @@ def spawn_investigators(state: IncidentState):
 # Define the graph schema and register each agent as a workflow node.
 graph = StateGraph(IncidentState)
 
-graph.add_node("log_monitor", log_monitor_agent)
-graph.add_node("orchestrator", orchestrator_agent)
+graph.add_node("triage_planner", triage_planner_agent)
+graph.add_node("investigation_router", investigation_router)
 graph.add_node("investigator", investigator_agent)
 graph.add_node("aggregator", aggregator_agent)
 graph.add_node("fix_suggester", fix_suggester_agent)
 graph.add_node("report_writer", report_writer_agent)
 
-# Every analysis starts with anomaly detection.
-graph.set_entry_point("log_monitor")
+# Every analysis starts with combined triage and investigation planning.
+graph.set_entry_point("triage_planner")
 
-# After the log monitor: continue to the orchestrator or end the workflow.
+# After triage: continue to investigators or end the workflow.
 graph.add_conditional_edges(
-    "log_monitor",
-    route_after_log_monitor,
+    "triage_planner",
+    route_after_triage,
     {
-        "continue": "orchestrator",
+        "continue": "investigation_router",
         "stop": END
     }
 )
 
-# The orchestrator dynamically decides how many investigator nodes run.
+# The triage planner dynamically decides how many investigator nodes run.
 # This conditional edge returns Send objects rather than a fixed node.
 graph.add_conditional_edges(
-    "orchestrator",
+    "investigation_router",
     spawn_investigators,
     ["investigator"]  # Send objects target the investigator node.
 )

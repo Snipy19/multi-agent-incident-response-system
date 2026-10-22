@@ -350,8 +350,7 @@ def _sse_event(payload: dict) -> str:
 def _stage_event(node: str, update: dict) -> dict:
     """Translate a LangGraph node update into safe progress text."""
     messages = {
-        "log_monitor": "Detection agent is checking the submitted log for anomalies.",
-        "orchestrator": "Orchestrator is grouping independent investigation hypotheses.",
+        "triage_planner": "Triage planner is detecting anomalies and selecting evidence-grounded investigation angles.",
         "aggregator": "Aggregator is comparing investigator evidence and forming a root-cause hypothesis.",
         "fix_suggester": "Remediation agent is evaluating a safe, reviewable recommendation.",
         "report_writer": "Documentation agent is preparing the incident report.",
