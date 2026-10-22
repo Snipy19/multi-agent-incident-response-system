@@ -8,7 +8,12 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
 from utils.llm_helper import invoke_with_retry
-from utils.guardrails import CERTAINTY_LEVELS, clean_model_text, parse_json_object
+from utils.guardrails import (
+    CERTAINTY_LEVELS,
+    clean_model_text,
+    constrain_dns_remediation,
+    parse_json_object,
+)
 
 load_dotenv()
 
@@ -107,7 +112,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
             raise ValueError("suggested_fix must be a non-empty string")
         if not 0.0 <= model_confidence <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
-        state["suggested_fix"] = suggested_fix.strip()
+        suggested_fix, remediation_guarded = constrain_dns_remediation(
+            suggested_fix.strip(), raw_log
+        )
+        state["suggested_fix"] = suggested_fix
         certainty = parsed.get("certainty", "Inconclusive")
         if certainty not in CERTAINTY_LEVELS:
             certainty = "Inconclusive"
@@ -115,6 +123,12 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         state["fix_certainty"] = certainty
         state["fix_evidence"] = [clean_model_text(x) for x in (parsed.get("supporting_evidence", []) if isinstance(parsed.get("supporting_evidence", []), list) else [])]
         state["fix_missing_evidence"] = [clean_model_text(x) for x in (parsed.get("missing_evidence", []) if isinstance(parsed.get("missing_evidence", []), list) else [])]
+        if remediation_guarded:
+            state["fix_confidence"] = min(state["fix_confidence"], 0.50)
+            state["fix_certainty"] = "Inconclusive"
+            state["fix_missing_evidence"].append(
+                "Resolver health evidence before changing DNS infrastructure"
+            )
         state["needs_human_review"] = (
             state["fix_confidence"] < CONFIDENCE_THRESHOLD
             or requires_human_review

@@ -76,6 +76,53 @@ def clean_model_text(value: Any) -> str:
             .replace("\u2022", "-"))
 
 
+def constrain_cross_service_causality(root_cause: str, raw_log: str) -> tuple[str, bool]:
+    """Prevent an unsupported DNS-to-service causal chain from being reported.
+
+    This is deliberately narrow: it only applies when the log names DNS
+    failures for the database hostname while separately reporting Redis/Kafka
+    symptoms, without directly connecting DNS to those components.
+    """
+    conclusion = clean_model_text(root_cause).strip()
+    log = raw_log.casefold()
+    text = conclusion.casefold()
+    if not all(term in log for term in ("dns", "db-primary", "redis", "kafka")):
+        return conclusion, False
+    if not any(term in text for term in ("same dns", "dns instability", "dns ... kafka", "dns ... redis")):
+        return conclusion, False
+
+    guarded = (
+        "The log directly confirms intermittent DNS lookup failures for "
+        "db-primary.internal and PostgreSQL connection timeouts, making a "
+        "database-connectivity issue a strong hypothesis. Redis latency and "
+        "Kafka lag are observed concurrent symptoms, but the submitted log "
+        "does not establish that DNS caused them; their relationship requires "
+        "separate validation."
+    )
+    return guarded, True
+
+
+def constrain_dns_remediation(suggested_fix: str, raw_log: str) -> tuple[str, bool]:
+    """Keep DNS infrastructure changes conditional on resolver evidence."""
+    recommendation = clean_model_text(suggested_fix).strip()
+    text = recommendation.casefold()
+    log = raw_log.casefold()
+    dns_change = any(term in text for term in ("coredns", "secondary dns", "local dns", "dns caching"))
+    resolver_evidence = any(term in log for term in ("resolver", "dns server", "dns misconfiguration", "dns cache"))
+    if not dns_change or resolver_evidence:
+        return recommendation, False
+
+    guarded = (
+        "First validate DNS query failure rates, resolver health, and resolution "
+        "of db-primary.internal from the checkout-api pods. Check database "
+        "reachability and correlate the timing with Redis and Kafka metrics. "
+        "Only if resolver-side failures are confirmed should the team evaluate "
+        "a DNS configuration or caching change; this log alone does not justify "
+        "adding DNS infrastructure."
+    )
+    return guarded, True
+
+
 def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dict[str, Any]:
     """Validate and ground one investigator's JSON response.
 

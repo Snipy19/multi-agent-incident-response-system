@@ -9,7 +9,12 @@ from langchain_groq import ChatGroq
 from state import IncidentState
 from vectorstore.retriever import retrieve_similar_patterns
 from utils.llm_helper import invoke_with_retry
-from utils.guardrails import CERTAINTY_LEVELS, clean_model_text, parse_json_object
+from utils.guardrails import (
+    CERTAINTY_LEVELS,
+    clean_model_text,
+    constrain_cross_service_causality,
+    parse_json_object,
+)
 
 load_dotenv()
 
@@ -100,7 +105,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
             raise ValueError("root_cause must be a non-empty string")
         if not 0.0 <= model_confidence <= 1.0:
             raise ValueError("confidence must be between 0 and 1")
-        state["root_cause"] = root_cause.strip()
+        root_cause, causality_guarded = constrain_cross_service_causality(
+            root_cause.strip(), raw_log
+        )
+        state["root_cause"] = root_cause
         certainty = parsed.get("certainty", "Inconclusive")
         if certainty not in CERTAINTY_LEVELS:
             certainty = "Inconclusive"
@@ -109,6 +117,15 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         state["root_cause_evidence"] = [clean_model_text(x) for x in (parsed.get("supporting_evidence", []) if isinstance(parsed.get("supporting_evidence", []), list) else [])]
         state["root_cause_missing_evidence"] = [clean_model_text(x) for x in (parsed.get("missing_evidence", []) if isinstance(parsed.get("missing_evidence", []), list) else [])]
         state["root_cause_alternatives"] = [clean_model_text(x) for x in (parsed.get("alternatives", []) if isinstance(parsed.get("alternatives", []), list) else [])]
+        if causality_guarded:
+            state["root_cause_confidence"] = min(state["root_cause_confidence"], 0.65)
+            state["root_cause_certainty"] = "Strong hypothesis"
+            state["root_cause_missing_evidence"].append(
+                "Direct correlation showing that the DNS failures affected Redis or Kafka"
+            )
+            state["root_cause_alternatives"].append(
+                "A separate network, broker, cache, or consumer-capacity issue affecting those services"
+            )
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"[AGGREGATOR AGENT] JSON parse error: {e}")
         state["root_cause"] = "Root-cause aggregation failed because the LLM response could not be parsed."

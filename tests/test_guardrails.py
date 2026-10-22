@@ -1,4 +1,12 @@
-from utils.guardrails import calibrate_confidence, clean_model_text, parse_investigator_output, parse_json_object, redact_sensitive_data
+from utils.guardrails import (
+    calibrate_confidence,
+    clean_model_text,
+    constrain_cross_service_causality,
+    constrain_dns_remediation,
+    parse_investigator_output,
+    parse_json_object,
+    redact_sensitive_data,
+)
 
 
 def test_model_json_parser_accepts_code_fences_and_trailing_text():
@@ -52,6 +60,29 @@ def test_supported_finding_preserves_valid_confidence():
     )
 
     assert finding["confidence"] == 0.84
+
+
+def test_cross_service_dns_causality_is_guarded_without_direct_evidence():
+    log = (
+        "DNS lookups for db-primary.internal failed; Redis reads were slow; "
+        "Kafka lag increased."
+    )
+    root_cause, guarded = constrain_cross_service_causality(
+        "The same DNS instability caused Redis and Kafka failures.", log
+    )
+
+    assert guarded is True
+    assert "does not establish that DNS caused them" in root_cause
+
+
+def test_dns_infrastructure_fix_requires_resolver_evidence():
+    fix, guarded = constrain_dns_remediation(
+        "Add a CoreDNS cache and secondary DNS resolver.",
+        "DNS lookups for db-primary.internal intermittently failed.",
+    )
+
+    assert guarded is True
+    assert "does not justify adding DNS infrastructure" in fix
 
 
 def test_calibration_uses_agreement_and_evidence_breadth():
