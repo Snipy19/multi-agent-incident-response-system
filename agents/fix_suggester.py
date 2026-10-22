@@ -94,6 +94,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 {{
     "suggested_fix": "a concise, specific, actionable fix (2-3 sentences)",
     "confidence": 0.0 to 1.0,
+    "confidence_reason": "one sentence explaining why the evidence supports this remediation and what uncertainty remains",
     "certainty": "Confirmed | Strong hypothesis | Inconclusive",
     "supporting_evidence": ["facts supporting why this fix addresses the issue"],
     "missing_evidence": ["validation required before applying the fix"]
@@ -120,6 +121,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         if certainty not in CERTAINTY_LEVELS:
             certainty = "Inconclusive"
         state["fix_confidence"] = round(model_confidence, 2)
+        state["fix_confidence_reason"] = clean_model_text(
+            parsed.get("confidence_reason")
+            or "The model did not provide a confidence rationale; review the supporting evidence before acting."
+        )
         state["fix_certainty"] = certainty
         state["fix_evidence"] = [clean_model_text(x) for x in (parsed.get("supporting_evidence", []) if isinstance(parsed.get("supporting_evidence", []), list) else [])]
         state["fix_missing_evidence"] = [clean_model_text(x) for x in (parsed.get("missing_evidence", []) if isinstance(parsed.get("missing_evidence", []), list) else [])]
@@ -138,6 +143,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         print(f"[FIX SUGGESTER AGENT] JSON parse error: {e}")
         state["suggested_fix"] = "A remediation recommendation could not be generated because the LLM response could not be parsed."
         state["fix_confidence"] = 0.0
+        state["fix_confidence_reason"] = "No confidence assessment was available because the remediation response was invalid."
         state["fix_certainty"] = "Inconclusive"
         state["fix_evidence"] = []
         state["fix_missing_evidence"] = ["A valid structured remediation response"]

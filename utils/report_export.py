@@ -78,6 +78,7 @@ def _clean_incident(incident):
             "angle": _clean_text(finding.get("angle")),
             "finding": _clean_text(finding.get("finding")),
             "certainty": _clean_text(finding.get("certainty")),
+            "confidence_reason": _clean_text(finding.get("confidence_reason")),
             "supporting_evidence": [_clean_text(x) for x in (finding.get("supporting_evidence") or [])],
             "missing_evidence": [_clean_text(x) for x in (finding.get("missing_evidence") or [])],
             "alternatives": [_clean_text(x) for x in (finding.get("alternatives") or [])],
@@ -85,7 +86,7 @@ def _clean_incident(incident):
         for finding in (cleaned.get("investigation_findings") or [])
     ]
     for key in (
-        "root_cause_certainty", "fix_certainty", "root_cause_evidence",
+        "root_cause_certainty", "root_cause_confidence_reason", "fix_certainty", "fix_confidence_reason", "root_cause_evidence",
         "root_cause_missing_evidence", "root_cause_alternatives", "fix_evidence",
         "fix_missing_evidence",
     ):
@@ -219,6 +220,7 @@ def build_live_report(state: dict) -> str:
             "",
             f"- Certainty: {_clean_text(finding.get('certainty') or 'Inconclusive')}",
             f"- Model estimate: {_pct(finding.get('confidence'))}",
+            f"- Confidence basis: {_clean_text(finding.get('confidence_reason') or 'Not provided')}",
         ])
         for label, key in (("Supporting evidence", "supporting_evidence"), ("Missing validation", "missing_evidence"), ("Alternative explanations", "alternatives")):
             values = finding.get(key) or []
@@ -233,6 +235,7 @@ def build_live_report(state: dict) -> str:
         "",
         f"- Certainty: {_clean_text(incident.get('root_cause_certainty') or 'Inconclusive')}",
         f"- Model estimate: {_pct(incident.get('root_cause_confidence'))}",
+        f"- Confidence basis: {_clean_text(incident.get('root_cause_confidence_reason') or 'Not provided')}",
     ])
     for label, key in (("Supporting evidence", "root_cause_evidence"), ("Missing validation", "root_cause_missing_evidence"), ("Alternative explanations", "root_cause_alternatives")):
         values = incident.get(key) or []
@@ -247,6 +250,7 @@ def build_live_report(state: dict) -> str:
         "",
         f"- Certainty: {_clean_text(incident.get('fix_certainty') or 'Inconclusive')}",
         f"- Model estimate: {_pct(incident.get('fix_confidence'))}",
+        f"- Confidence basis: {_clean_text(incident.get('fix_confidence_reason') or 'Not provided')}",
     ])
     for label, key in (("Supporting evidence", "fix_evidence"), ("Missing validation", "fix_missing_evidence")):
         values = incident.get(key) or []

@@ -143,6 +143,7 @@
     }
     .finding-text { font-size: 13px; color: #cbd5e1; line-height: 1.55; }
     .finding-text .conf { color: #64748b; font-size: 11.5px; }
+    .confidence-reason { color: #8292aa; font-size: 11.5px; margin-top: 6px; }
 
     .report-box {
         background: #0b0f19; border: 1px solid #1f2937; border-radius: 8px; padding: 22px;
@@ -258,6 +259,7 @@
             <div class="section-title">Root Cause <span class="confidence-tag" id="rootConfidence"></span></div>
             <div class="card">
                 <p id="rootCause"></p>
+                <div class="confidence-reason" id="rootConfidenceReason"></div>
             </div>
 
             <div class="section-title">
@@ -266,6 +268,7 @@
             </div>
             <div class="card">
                 <p id="suggestedFix"></p>
+                <div class="confidence-reason" id="fixConfidenceReason"></div>
             </div>
 
             <div class="section-title">Full Report</div>
@@ -364,7 +367,7 @@
         return "Low estimate";
     }
 
-    function confidenceDisplay(score, label = "Model estimate") {
+    function confidenceDisplay(score, label = "Evidence estimate") {
         if (typeof score !== "number" || Number.isNaN(score)) return "Not available";
         return `${(score * 100).toFixed(0)}% · ${label}`;
     }
@@ -600,17 +603,19 @@
             row.className = "finding-row";
             row.innerHTML = `
                 <div class="finding-angle">${escapeHtml(f.angle)}</div>
-                <div class="finding-text">${escapeHtml(f.finding)} <span class="conf">(${escapeHtml(f.certainty || "Inconclusive")}; ${confidenceDisplay(f.confidence)})</span></div>
+                <div class="finding-text">${escapeHtml(f.finding)} <span class="conf">(${escapeHtml(f.certainty || "Inconclusive")}; ${confidenceDisplay(f.confidence)})</span><div class="confidence-reason">Confidence basis: ${escapeHtml(f.confidence_reason || "Not provided")}</div></div>
             `;
             findingsList.appendChild(row);
         });
 
         document.getElementById("rootCause").textContent = data.root_cause;
+        document.getElementById("rootConfidenceReason").textContent = "Confidence basis: " + (data.root_cause_confidence_reason || "Not provided");
         const rootBadge = document.getElementById("rootConfidence");
         rootBadge.textContent = `${data.root_cause_certainty || "Inconclusive"} · ${confidenceDisplay(data.root_cause_confidence)}`;
         rootBadge.className = "confidence-tag " + confidenceClass(data.root_cause_confidence);
 
         document.getElementById("suggestedFix").textContent = data.suggested_fix;
+        document.getElementById("fixConfidenceReason").textContent = "Confidence basis: " + (data.fix_confidence_reason || "Not provided");
         const fixBadge = document.getElementById("fixConfidence");
         fixBadge.textContent = `${data.fix_certainty || "Inconclusive"} · ${confidenceDisplay(data.fix_confidence)}`;
         fixBadge.className = "confidence-tag " + confidenceClass(data.fix_confidence);

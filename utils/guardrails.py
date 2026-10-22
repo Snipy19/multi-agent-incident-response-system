@@ -134,6 +134,7 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
         "angle": angle,
         "finding": f"{angle} analysis was inconclusive because the model response was invalid.",
         "confidence": 0.0,
+        "confidence_reason": "No valid model response was available to assess the evidence.",
         "certainty": "Inconclusive",
         "supporting_evidence": [],
         "missing_evidence": ["A valid investigator response"],
@@ -177,6 +178,10 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
         "angle": angle,
         "finding": clean_model_text(finding.strip()),
         "confidence": round(confidence, 2),
+        "confidence_reason": clean_model_text(
+            parsed.get("confidence_reason")
+            or "The model did not provide a confidence rationale. Review the evidence and missing validation."
+        ),
         "certainty": certainty,
         "supporting_evidence": [clean_model_text(x) for x in clean_list(parsed.get("supporting_evidence"))],
         "missing_evidence": [clean_model_text(x) for x in clean_list(parsed.get("missing_evidence"))],

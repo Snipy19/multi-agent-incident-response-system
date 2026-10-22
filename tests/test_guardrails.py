@@ -62,6 +62,17 @@ def test_supported_finding_preserves_valid_confidence():
     assert finding["confidence"] == 0.84
 
 
+def test_supported_finding_exposes_confidence_basis():
+    finding = parse_investigator_output(
+        '{"finding":"PostgreSQL connection timeout indicates database connectivity trouble.",'
+        '"confidence":0.84,"confidence_reason":"The timeout is directly observed, but live reachability is unverified."}',
+        "Database",
+        "checkout-service PostgreSQL connection timeout after 30s",
+    )
+
+    assert "directly observed" in finding["confidence_reason"]
+
+
 def test_cross_service_dns_causality_is_guarded_without_direct_evidence():
     log = (
         "DNS lookups for db-primary.internal failed; Redis reads were slow; "

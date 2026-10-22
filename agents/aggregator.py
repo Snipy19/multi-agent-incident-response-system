@@ -86,6 +86,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 {{
     "root_cause": "a clear 2-3 sentence unified root cause, mentioning primary vs secondary factors if relevant",
     "confidence": 0.0 to 1.0,
+    "confidence_reason": "one sentence explaining how direct and complete the evidence is and why uncertainty remains",
     "certainty": "Confirmed | Strong hypothesis | Inconclusive",
     "supporting_evidence": ["specific evidence from the log or investigator findings"],
     "missing_evidence": ["the most important validation still required"],
@@ -113,6 +114,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         if certainty not in CERTAINTY_LEVELS:
             certainty = "Inconclusive"
         state["root_cause_confidence"] = round(model_confidence, 2)
+        state["root_cause_confidence_reason"] = clean_model_text(
+            parsed.get("confidence_reason")
+            or "The model did not provide a confidence rationale; review the evidence and missing validation."
+        )
         state["root_cause_certainty"] = certainty
         state["root_cause_evidence"] = [clean_model_text(x) for x in (parsed.get("supporting_evidence", []) if isinstance(parsed.get("supporting_evidence", []), list) else [])]
         state["root_cause_missing_evidence"] = [clean_model_text(x) for x in (parsed.get("missing_evidence", []) if isinstance(parsed.get("missing_evidence", []), list) else [])]
@@ -130,6 +135,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         print(f"[AGGREGATOR AGENT] JSON parse error: {e}")
         state["root_cause"] = "Root-cause aggregation failed because the LLM response could not be parsed."
         state["root_cause_confidence"] = 0.0
+        state["root_cause_confidence_reason"] = "No confidence assessment was available because the aggregator response was invalid."
         state["root_cause_certainty"] = "Inconclusive"
         state["root_cause_evidence"] = []
         state["root_cause_missing_evidence"] = ["A valid aggregator response"]

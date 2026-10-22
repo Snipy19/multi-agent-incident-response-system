@@ -11,6 +11,7 @@ class InvestigationFinding(TypedDict):
     angle: str              # For example: Database, Memory, or Network.
     finding: str             # Evidence discovered for this angle.
     confidence: float
+    confidence_reason: str
     certainty: str
     supporting_evidence: List[str]
     missing_evidence: List[str]
@@ -43,12 +44,14 @@ class IncidentState(TypedDict):
     root_cause_evidence: Optional[List[str]]
     root_cause_missing_evidence: Optional[List[str]]
     root_cause_alternatives: Optional[List[str]]
+    root_cause_confidence_reason: Optional[str]
 
     suggested_fix: Optional[str]
     fix_confidence: Optional[float]
     fix_certainty: Optional[str]
     fix_evidence: Optional[List[str]]
     fix_missing_evidence: Optional[List[str]]
+    fix_confidence_reason: Optional[str]
 
     needs_human_review: Optional[bool]
 

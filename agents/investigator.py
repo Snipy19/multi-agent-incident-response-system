@@ -66,6 +66,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
 {{
     "finding": "a concise 1-2 sentence finding from the {angle} perspective",
     "confidence": 0.0 to 1.0,
+    "confidence_reason": "one sentence explaining how direct, complete, and independent the evidence is",
     "certainty": "Confirmed | Strong hypothesis | Inconclusive",
     "supporting_evidence": ["specific facts copied or paraphrased from the log"],
     "missing_evidence": ["the most important check still needed"],
