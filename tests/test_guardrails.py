@@ -3,6 +3,7 @@ from utils.guardrails import (
     clean_model_text,
     constrain_cross_service_causality,
     constrain_dns_remediation,
+    generated_report_input_reason,
     parse_investigator_output,
     parse_json_object,
     redact_sensitive_data,
@@ -32,6 +33,17 @@ def test_redacts_common_credentials_and_personal_data():
     assert "gsk_test_1234567890" not in sanitized
     assert "person@example.com" not in sanitized
     assert "[REDACTED" in sanitized
+
+
+def test_report_text_is_rejected_before_analysis():
+    assert generated_report_input_reason("Confidence basis: the timeout is unverified.")
+    assert generated_report_input_reason("Full Report\n## Root Cause Assessment")
+
+
+def test_operational_timeout_log_is_not_rejected_as_report_text():
+    assert generated_report_input_reason(
+        "2026-10-22T18:42:11Z checkout-api ERROR request timeout after 30s"
+    ) is None
 
 
 def test_invalid_investigator_json_is_safe_low_confidence():

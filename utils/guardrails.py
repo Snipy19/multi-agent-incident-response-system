@@ -31,6 +31,14 @@ _SECRET_PATTERNS = (
     (re.compile(r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b", re.IGNORECASE), "[REDACTED_EMAIL]"),
 )
 
+_GENERATED_REPORT_MARKERS = (
+    re.compile(r"(?im)^\s*(?:#\s*)?confidence\s+basis\s*:"),
+    re.compile(r"(?im)^\s*(?:#\s*)?full\s+report\s*$"),
+    re.compile(r"(?im)^\s*(?:#\s*)?recommended\s+(?:fix|remediation)\b"),
+    re.compile(r"(?im)^\s*(?:#\s*)?investigation\s+findings\s*$"),
+    re.compile(r"(?im)^\s*(?:#\s*)?root\s+cause\s+(?:assessment|analysis)\s*$"),
+)
+
 
 def redact_sensitive_data(raw_log: str) -> str:
     """Return a log safe to send to an LLM and persist in the database."""
@@ -38,6 +46,24 @@ def redact_sensitive_data(raw_log: str) -> str:
     for pattern, replacement in _SECRET_PATTERNS:
         sanitized = pattern.sub(replacement, sanitized)
     return sanitized
+
+
+def generated_report_input_reason(raw_log: str) -> str | None:
+    """Return a reason when input clearly looks like generated report text.
+
+    A single operational word such as ``timeout`` is intentionally not enough
+    to reject a log. These markers are report-specific and are checked before
+    any LLM or investigator work begins.
+    """
+    text = str(raw_log or "")
+    for marker in _GENERATED_REPORT_MARKERS:
+        if marker.search(text):
+            return (
+                "The submitted text appears to be generated analysis/report content "
+                "rather than a raw operational log. Submit timestamps, service names, "
+                "errors, metrics, or stack traces."
+            )
+    return None
 
 
 def parse_json_object(raw_output: str) -> dict[str, Any]:

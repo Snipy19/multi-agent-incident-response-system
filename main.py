@@ -31,7 +31,7 @@ from db.database import (
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from utils.email_helper import send_otp_email
 from utils.report_export import build_markdown, build_text, build_pdf
-from utils.guardrails import redact_sensitive_data
+from utils.guardrails import generated_report_input_reason, redact_sensitive_data
 
 
 def get_graph_app():
@@ -325,6 +325,10 @@ def build_initial_state(request: LogRequest) -> dict:
             status_code=422,
             detail="target_agent_count is required when agent_mode is load_test",
         )
+
+    report_reason = generated_report_input_reason(request.raw_log)
+    if report_reason:
+        raise HTTPException(status_code=422, detail=report_reason)
 
     # Sanitize before the log reaches LangGraph, Groq, RAG, or persistence.
     # The original unredacted payload is deliberately not stored.
