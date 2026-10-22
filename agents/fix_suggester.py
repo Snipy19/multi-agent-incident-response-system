@@ -57,7 +57,13 @@ Root cause:
 Do not present a numeric score as a calibrated probability. Select one certainty
 level exactly: Confirmed, Strong hypothesis, or Inconclusive. A fix is never
 confirmed merely because the diagnosis is plausible; say what must be validated
-before applying it and avoid destructive or irreversible actions.
+before applying it and avoid destructive or irreversible actions. Prefer the
+least-invasive validation steps first, such as checking DNS queries, service
+discovery logs, health metrics, connection-pool state, and packet reachability.
+Do not propose adding a service mesh, sidecar, cache layer, replica pool, or
+other new infrastructure unless the submitted evidence directly shows that the
+existing component is misconfigured or capacity-constrained. Do not treat a
+timeout as proof of a DNS, firewall, or network root cause.
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{
