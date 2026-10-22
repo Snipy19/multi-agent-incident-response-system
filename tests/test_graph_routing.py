@@ -27,6 +27,19 @@ def test_focus_log_has_a_bounded_size():
     assert len(build_focus_log(raw_log, "database", max_chars=8000)) <= 8000
 
 
+def test_focus_log_uses_component_aliases_for_messaging():
+    raw_log = "\n".join([
+        "checkout-api returned HTTP 503",
+        "Kafka consumer lag increased to 31000 messages",
+        "PostgreSQL connection timed out",
+    ])
+
+    focus = build_focus_log(raw_log, "Messaging")
+
+    assert "Kafka consumer lag" in focus
+    assert "PostgreSQL connection" not in focus
+
+
 def test_compact_repeated_events_preserves_count_and_order():
     raw_log = "\n".join([
         "2026-10-22T19:00:00Z ERROR checkout timeout",

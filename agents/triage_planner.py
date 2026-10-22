@@ -16,6 +16,7 @@ from state import IncidentState
 from utils.agent_planning import (
     MAX_AGENT_COUNT,
     deduplicate_angles,
+    ensure_failure_domain_coverage,
     requested_load_test_targets,
 )
 from utils.guardrails import clean_model_text, parse_json_object
@@ -82,7 +83,7 @@ Respond ONLY with valid JSON in this exact format:
 
         state["is_anomaly"] = is_anomaly
         state["anomaly_reason"] = clean_model_text(reason).strip()
-        state["investigation_angles"] = deduplicate_angles(angles)
+        state["investigation_angles"] = ensure_failure_domain_coverage(raw_log, angles)
     except (json.JSONDecodeError, KeyError, ValueError, AttributeError) as error:
         print(f"[TRIAGE PLANNER AGENT] Structured response failed: {error}")
         # A malformed triage response must not silently skip a possible

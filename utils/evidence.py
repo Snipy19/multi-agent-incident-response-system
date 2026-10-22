@@ -12,6 +12,14 @@ _TIMESTAMP_PREFIX = re.compile(
     r"^\s*(?:\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(?:\.\d+)?Z?\s+|\[[^\]]+\]\s+)"
 )
 
+_ANGLE_ALIASES = {
+    "database": ("database", "postgres", "mysql", "db-", "sql"),
+    "cache": ("cache", "redis", "memcached"),
+    "messaging": ("kafka", "consumer", "queue", "message", "rebalance"),
+    "network": ("network", "dns", "routing", "firewall", "packet", "latency"),
+    "application": ("api", "service", "pod", "readiness", "http", "request"),
+}
+
 
 def compact_repeated_events(raw_log: str, max_chars: int = 24000) -> str:
     """Collapse repeated log events while preserving counts and order.
@@ -65,7 +73,9 @@ def build_focus_log(raw_log: str, angle: str, max_chars: int = 8000) -> str:
     if not lines:
         return raw_log[:max_chars]
 
-    keywords = [word.lower() for word in angle.replace("_", "-").split() if len(word) > 2]
+    normalized_angle = angle.replace("_", "-").casefold()
+    keywords = list(_ANGLE_ALIASES.get(normalized_angle, ()))
+    keywords.extend(word for word in normalized_angle.split() if len(word) > 2)
     relevant = [
         line for line in lines
         if any(keyword in line.lower() for keyword in keywords)

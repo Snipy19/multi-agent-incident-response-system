@@ -5,7 +5,11 @@ Verify that the orchestrator can preserve explicit service targets and create
 an exact requested count in the dedicated load-test mode.
 """
 
-from utils.agent_planning import named_service_targets, requested_load_test_targets
+from utils.agent_planning import (
+    ensure_failure_domain_coverage,
+    named_service_targets,
+    requested_load_test_targets,
+)
 
 
 def test_named_services_are_deduplicated_in_input_order():
@@ -22,3 +26,11 @@ def test_load_test_mode_creates_exact_requested_count():
     assert len(targets) == 10
     assert targets[:3] == ["service-001", "service-002", "service-003"]
     assert targets[-1] == "load-test-agent-010"
+
+
+def test_failure_domain_coverage_adds_omitted_kafka_without_one_agent_per_line():
+    log = "checkout-api returned 503; Kafka consumer lag increased and rebalance failed."
+
+    angles = ensure_failure_domain_coverage(log, ["Application"])
+
+    assert angles == ["Application", "Messaging"]
