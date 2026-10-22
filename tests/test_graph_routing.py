@@ -5,7 +5,7 @@ The fan-out planner must give each investigator a focused evidence slice so
 large incidents remain useful and affordable to analyze.
 """
 
-from utils.evidence import build_focus_log
+from utils.evidence import build_focus_log, compact_repeated_events
 
 
 def test_focus_log_selects_angle_specific_lines():
@@ -25,3 +25,18 @@ def test_focus_log_has_a_bounded_size():
     raw_log = "\n".join(f"service-{index:03d} ERROR repeated failure" for index in range(5000))
 
     assert len(build_focus_log(raw_log, "database", max_chars=8000)) <= 8000
+
+
+def test_compact_repeated_events_preserves_count_and_order():
+    raw_log = "\n".join([
+        "2026-10-22T19:00:00Z ERROR checkout timeout",
+        "2026-10-22T19:00:01Z ERROR checkout timeout",
+        "2026-10-22T19:00:02Z ERROR checkout timeout",
+        "2026-10-22T19:00:03Z WARN cache latency",
+    ])
+
+    compacted = compact_repeated_events(raw_log)
+
+    assert "[repeated event x3]" in compacted
+    assert compacted.index("checkout timeout") < compacted.index("cache latency")
+    assert "2026-10-22T19:00:00Z" in compacted

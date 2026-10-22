@@ -33,7 +33,7 @@ def aggregator_agent(state: IncidentState) -> IncidentState:
     print("\n[AGGREGATOR AGENT] Combining investigator findings...")
 
     findings = state["investigation_findings"]
-    raw_log = state["raw_log"]
+    raw_log = state.get("analysis_log") or state["raw_log"]
 
     findings_text = "\n".join(
         [f"- [{f['angle']}] {f['finding']} (confidence: {f['confidence']})" for f in findings]
@@ -41,7 +41,7 @@ def aggregator_agent(state: IncidentState) -> IncidentState:
 
     print(f"[AGGREGATOR AGENT] Received {len(findings)} findings:\n{findings_text}")
 
-    similar_patterns = retrieve_similar_patterns(state["raw_log"], top_k=3)
+    similar_patterns = retrieve_similar_patterns(raw_log, top_k=3)
     rag_context = "\n".join(
         [
             f"- [{p['dataset']}/{p['level']}/{p.get('label', 'Unknown')}] "

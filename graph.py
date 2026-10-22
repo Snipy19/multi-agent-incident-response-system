@@ -56,8 +56,10 @@ def spawn_investigators(state: IncidentState):
     return [
         Send("investigator", {
             "angle": angle,
-            "raw_log": state["raw_log"],
-            "focus_log": build_focus_log(state["raw_log"], angle),
+            "raw_log": state.get("analysis_log") or state["raw_log"],
+            "focus_log": build_focus_log(
+                state.get("analysis_log") or state["raw_log"], angle
+            ),
             "agent_mode": state.get("agent_mode", "adaptive"),
         })
         for angle in angles

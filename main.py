@@ -31,6 +31,7 @@ from db.database import (
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from utils.email_helper import send_otp_email
 from utils.report_export import build_markdown, build_text, build_pdf
+from utils.evidence import compact_repeated_events
 from utils.guardrails import generated_report_input_reason, redact_sensitive_data
 
 
@@ -335,6 +336,7 @@ def build_initial_state(request: LogRequest) -> dict:
     safe_log = redact_sensitive_data(request.raw_log)
     return {
         "raw_log": safe_log,
+        "analysis_log": compact_repeated_events(safe_log),
         "agent_mode": request.agent_mode,
         "requested_agent_count": request.target_agent_count,
         "is_anomaly": None, "anomaly_reason": None,

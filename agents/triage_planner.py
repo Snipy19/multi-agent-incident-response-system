@@ -36,7 +36,7 @@ def triage_planner_agent(state: IncidentState) -> IncidentState:
     """Classify the log and select grounded investigation angles in one call."""
     print("\n[TRIAGE PLANNER AGENT] Detecting anomaly and planning investigation...")
 
-    raw_log = state["raw_log"]
+    raw_log = state.get("analysis_log") or state["raw_log"]
     prompt = f"""You are a senior DevOps incident triage planner.
 
 Analyze this submitted log:

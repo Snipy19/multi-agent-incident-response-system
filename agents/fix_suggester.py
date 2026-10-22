@@ -53,7 +53,7 @@ def fix_suggester_agent(state: IncidentState) -> IncidentState:
         return {k: v for k, v in state.items() if k != "investigation_findings"}
 
     root_cause = state["root_cause"]
-    raw_log = state["raw_log"]
+    raw_log = state.get("analysis_log") or state["raw_log"]
     root_cause_evidence = state.get("root_cause_evidence") or []
     missing_evidence = state.get("root_cause_missing_evidence") or []
     alternatives = state.get("root_cause_alternatives") or []
