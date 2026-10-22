@@ -7,13 +7,13 @@ FROM python:3.12-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
     PORT=8000
 
 WORKDIR /app
 
 COPY requirements-runtime.txt ./
-RUN pip install --upgrade pip \
-    && pip install --no-cache-dir -r requirements-runtime.txt
+RUN pip install --no-cache-dir -r requirements-runtime.txt
 
 COPY auth.py graph.py main.py state.py pytest.ini ./
 COPY agents ./agents
@@ -21,7 +21,8 @@ COPY db ./db
 COPY frontend ./frontend
 COPY utils ./utils
 COPY vectorstore ./vectorstore
-COPY data ./data
+# The prebuilt FAISS index is all the runtime retriever needs. Raw datasets
+# remain in the repository for index rebuilding but do not belong in the app image.
 
 # Run as an unprivileged user. The database directory is writable so the
 # local SQLite development volume can be used without running as root.
