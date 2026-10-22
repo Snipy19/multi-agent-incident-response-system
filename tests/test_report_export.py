@@ -1,4 +1,4 @@
-from utils.report_export import build_markdown, build_pdf, build_text
+from utils.report_export import build_live_report, build_markdown, build_pdf, build_text
 
 
 def sample_incident():
@@ -39,6 +39,26 @@ def test_report_formats_are_built_from_incident_data():
     assert "A database connection" in text
     assert pdf.startswith(b"%PDF")
     assert len(pdf) > 1000
+
+
+def test_live_report_is_structured_without_inventing_claims():
+    incident = sample_incident()
+    incident.update({
+        "root_cause_certainty": "Strong hypothesis",
+        "root_cause_evidence": ["The database endpoint timed out."],
+        "root_cause_missing_evidence": ["Network reachability test"],
+        "root_cause_alternatives": ["Connection-pool exhaustion"],
+        "fix_certainty": "Inconclusive",
+        "fix_evidence": ["The timeout is directly observed."],
+        "fix_missing_evidence": ["Validate database health first."],
+    })
+
+    report = build_live_report(incident)
+
+    assert "Strong hypothesis" in report
+    assert "Network reachability test" in report
+    assert "Connection-pool exhaustion" in report
+    assert "The fix was applied" not in report
 
 
 def test_report_formats_normalize_problematic_typography():

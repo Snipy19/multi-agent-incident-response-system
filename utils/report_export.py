@@ -189,6 +189,83 @@ def _methodology(incident):
     return pipeline, limits
 
 
+def build_live_report(state: dict) -> str:
+    """Build the UI narrative only from verified workflow state.
+
+    This deliberately does not call an LLM. The diagnostic agents already
+    produced the structured findings; rendering them deterministically keeps
+    the report auditable, fast, and free from a second layer of invented facts.
+    """
+    incident = _clean_incident(dict(state))
+    if not incident.get("is_anomaly"):
+        return "# Incident Analysis\n\nNo anomaly was detected. No investigation or remediation recommendation was generated."
+
+    findings = incident.get("investigation_findings") or []
+    lines = [
+        "# Incident Analysis",
+        "",
+        "## 1. Summary",
+        "",
+        _clean_text(incident.get("anomaly_reason") or "An anomaly was detected in the submitted log."),
+        "",
+        "## 2. Investigation Findings",
+        "",
+    ]
+    for finding in findings:
+        lines.extend([
+            f"### {_clean_text(finding.get('angle') or 'Investigation angle')}",
+            "",
+            _clean_text(finding.get("finding") or "No finding was returned."),
+            "",
+            f"- Certainty: {_clean_text(finding.get('certainty') or 'Inconclusive')}",
+            f"- Model estimate: {_pct(finding.get('confidence'))}",
+        ])
+        for label, key in (("Supporting evidence", "supporting_evidence"), ("Missing validation", "missing_evidence"), ("Alternative explanations", "alternatives")):
+            values = finding.get(key) or []
+            if values:
+                lines.append(f"- {label}: " + "; ".join(_clean_text(value) for value in values))
+        lines.append("")
+
+    lines.extend([
+        "## 3. Root Cause Assessment",
+        "",
+        _clean_text(incident.get("root_cause") or "No root-cause assessment was generated."),
+        "",
+        f"- Certainty: {_clean_text(incident.get('root_cause_certainty') or 'Inconclusive')}",
+        f"- Model estimate: {_pct(incident.get('root_cause_confidence'))}",
+    ])
+    for label, key in (("Supporting evidence", "root_cause_evidence"), ("Missing validation", "root_cause_missing_evidence"), ("Alternative explanations", "root_cause_alternatives")):
+        values = incident.get(key) or []
+        if values:
+            lines.append(f"- {label}: " + "; ".join(_clean_text(value) for value in values))
+
+    lines.extend([
+        "",
+        "## 4. Recommended Remediation",
+        "",
+        _clean_text(incident.get("suggested_fix") or "No remediation recommendation was generated."),
+        "",
+        f"- Certainty: {_clean_text(incident.get('fix_certainty') or 'Inconclusive')}",
+        f"- Model estimate: {_pct(incident.get('fix_confidence'))}",
+    ])
+    for label, key in (("Supporting evidence", "fix_evidence"), ("Missing validation", "fix_missing_evidence")):
+        values = incident.get(key) or []
+        if values:
+            lines.append(f"- {label}: " + "; ".join(_clean_text(value) for value in values))
+
+    lines.extend([
+        "",
+        "## 5. Review Status",
+        "",
+        "Human review is required before applying any recommendation."
+        if incident.get("needs_human_review")
+        else "No automatic escalation was flagged; an engineer should still validate the recommendation before use.",
+        "",
+        "This report contains model-assisted analysis of the submitted log. It does not claim that a fix was applied or that production systems were inspected.",
+    ])
+    return "\n".join(lines)
+
+
 _ABBREV_END = re.compile(r"(?:e\.g|i\.e|etc|vs|approx|incl)\.$", re.IGNORECASE)
 
 
