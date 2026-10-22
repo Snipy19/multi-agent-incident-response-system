@@ -17,6 +17,7 @@ from utils.agent_planning import (
     deduplicate_angles,
     requested_load_test_targets,
 )
+from utils.guardrails import parse_json_object
 
 load_dotenv()
 
@@ -85,7 +86,7 @@ Respond ONLY with a valid JSON object in this exact format, with no markdown:
         response = invoke_with_retry(llm, prompt)
         raw_output = response.content.strip()
         print(f"[ORCHESTRATOR AGENT] Raw LLM output: {raw_output}")
-        parsed = json.loads(raw_output)
+        parsed = parse_json_object(raw_output)
         angles = parsed["angles"]
     except (json.JSONDecodeError, KeyError, AttributeError) as error:
         print(f"[ORCHESTRATOR AGENT] First attempt failed: {error}. Retrying with a simpler prompt...")
@@ -103,7 +104,7 @@ Respond ONLY with JSON: {{"angles": ["label1", "label2", ...]}}"""
             response = invoke_with_retry(llm, fallback_prompt)
             raw_output = response.content.strip()
             print(f"[ORCHESTRATOR AGENT] Fallback raw output: {raw_output}")
-            parsed = json.loads(raw_output)
+            parsed = parse_json_object(raw_output)
             angles = parsed["angles"]
         except (json.JSONDecodeError, KeyError, AttributeError) as fallback_error:
             print(f"[ORCHESTRATOR AGENT] Fallback attempt also failed: {fallback_error}")

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
 from utils.llm_helper import invoke_with_retry
-from utils.guardrails import CERTAINTY_LEVELS
+from utils.guardrails import CERTAINTY_LEVELS, clean_model_text, parse_json_object
 
 load_dotenv()
 
@@ -74,8 +74,8 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     print(f"[FIX SUGGESTER AGENT] LLM ka raw output: {raw_output}")
 
     try:
-        parsed = json.loads(raw_output)
-        suggested_fix = parsed["suggested_fix"]
+        parsed = parse_json_object(raw_output)
+        suggested_fix = clean_model_text(parsed["suggested_fix"])
         model_confidence = float(parsed["confidence"])
         if not isinstance(suggested_fix, str) or not suggested_fix.strip():
             raise ValueError("suggested_fix must be a non-empty string")
@@ -87,8 +87,8 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
             certainty = "Inconclusive"
         state["fix_confidence"] = round(model_confidence, 2)
         state["fix_certainty"] = certainty
-        state["fix_evidence"] = parsed.get("supporting_evidence", [])
-        state["fix_missing_evidence"] = parsed.get("missing_evidence", [])
+        state["fix_evidence"] = [clean_model_text(x) for x in (parsed.get("supporting_evidence", []) if isinstance(parsed.get("supporting_evidence", []), list) else [])]
+        state["fix_missing_evidence"] = [clean_model_text(x) for x in (parsed.get("missing_evidence", []) if isinstance(parsed.get("missing_evidence", []), list) else [])]
         state["needs_human_review"] = (
             state["fix_confidence"] < CONFIDENCE_THRESHOLD
             or requires_human_review
@@ -98,6 +98,9 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         print(f"[FIX SUGGESTER AGENT] JSON parse error: {e}")
         state["suggested_fix"] = "A remediation recommendation could not be generated because the LLM response could not be parsed."
         state["fix_confidence"] = 0.0
+        state["fix_certainty"] = "Inconclusive"
+        state["fix_evidence"] = []
+        state["fix_missing_evidence"] = ["A valid structured remediation response"]
         state["needs_human_review"] = True
 
     print(f"[FIX SUGGESTER AGENT] Fix: {state['suggested_fix']} (confidence: {state['fix_confidence']}, human review: {state['needs_human_review']})")

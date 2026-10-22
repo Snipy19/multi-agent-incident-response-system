@@ -40,6 +40,42 @@ def redact_sensitive_data(raw_log: str) -> str:
     return sanitized
 
 
+def parse_json_object(raw_output: str) -> dict[str, Any]:
+    """Parse a model JSON object even when it includes a code fence or prose."""
+    text = str(raw_output or "").strip()
+    fenced = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, flags=re.IGNORECASE | re.DOTALL)
+    if fenced:
+        text = fenced.group(1).strip()
+    try:
+        parsed = json.loads(text)
+    except json.JSONDecodeError:
+        start = text.find("{")
+        if start < 0:
+            raise
+        parsed, _ = json.JSONDecoder().raw_decode(text[start:])
+    if not isinstance(parsed, dict):
+        raise ValueError("model response must be a JSON object")
+    return parsed
+
+
+def clean_model_text(value: Any) -> str:
+    """Repair common UTF-8/Windows-1252 decoding damage in model output."""
+    text = "" if value is None else str(value)
+    for _ in range(2):
+        if not any(marker in text for marker in ("Ã", "Â", "â", "ð")):
+            break
+        try:
+            repaired = text.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            break
+        if repaired == text:
+            break
+        text = repaired
+    return (text.replace("\u2011", "-").replace("\u2013", "-").replace("\u2014", "-")
+            .replace("\u2018", "'").replace("\u2019", "'")
+            .replace("\u2022", "-"))
+
+
 def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dict[str, Any]:
     """Validate and ground one investigator's JSON response.
 
@@ -58,7 +94,7 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
     }
 
     try:
-        parsed = json.loads(raw_output)
+        parsed = parse_json_object(raw_output)
         if not isinstance(parsed, dict):
             return fallback
 
@@ -92,12 +128,12 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
 
     return {
         "angle": angle,
-        "finding": finding.strip(),
+        "finding": clean_model_text(finding.strip()),
         "confidence": round(confidence, 2),
         "certainty": certainty,
-        "supporting_evidence": clean_list(parsed.get("supporting_evidence")),
-        "missing_evidence": clean_list(parsed.get("missing_evidence")),
-        "alternatives": clean_list(parsed.get("alternatives")),
+        "supporting_evidence": [clean_model_text(x) for x in clean_list(parsed.get("supporting_evidence"))],
+        "missing_evidence": [clean_model_text(x) for x in clean_list(parsed.get("missing_evidence"))],
+        "alternatives": [clean_model_text(x) for x in clean_list(parsed.get("alternatives"))],
     }
 
 

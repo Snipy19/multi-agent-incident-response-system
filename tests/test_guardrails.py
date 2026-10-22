@@ -1,4 +1,14 @@
-from utils.guardrails import calibrate_confidence, parse_investigator_output, redact_sensitive_data
+from utils.guardrails import calibrate_confidence, clean_model_text, parse_investigator_output, parse_json_object, redact_sensitive_data
+
+
+def test_model_json_parser_accepts_code_fences_and_trailing_text():
+    parsed = parse_json_object('```json\n{"ok": true}\n```\nDone.')
+    assert parsed == {"ok": True}
+
+
+def test_model_text_cleanup_repairs_common_mojibake():
+    broken = "DNS" + chr(0x00e2) + chr(0x20ac) + chr(0x2018) + "level"
+    assert clean_model_text(broken) == "DNS-level"
 
 
 def test_redacts_common_credentials_and_personal_data():

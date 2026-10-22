@@ -60,7 +60,10 @@ STRICT RULES:
   was resolved, or that any action has already been taken.
 - If a detail is not provided, leave it out instead of guessing.
 - Explicitly distinguish confirmed facts, strong hypotheses, and inconclusive
-  possibilities. Include missing validation and alternatives when supplied.
+  possibilities. Call something an "Observed fact" only when it is explicitly
+  present in the log. Causal explanations must be labelled hypotheses unless
+  the log directly proves causality. Include missing validation and alternatives
+  when supplied.
 - Do NOT add a "prepared by" line.
 
 Keep it concise but professional, as if it will be read by an engineering team."""

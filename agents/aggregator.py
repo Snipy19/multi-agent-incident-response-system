@@ -9,7 +9,7 @@ from langchain_groq import ChatGroq
 from state import IncidentState
 from vectorstore.retriever import retrieve_similar_patterns
 from utils.llm_helper import invoke_with_retry
-from utils.guardrails import CERTAINTY_LEVELS
+from utils.guardrails import CERTAINTY_LEVELS, clean_model_text, parse_json_object
 
 load_dotenv()
 
@@ -59,9 +59,9 @@ which finding(s) are most likely the PRIMARY cause versus contributing/secondary
 
 Do not present a numeric score as a calibrated probability. Select one certainty
 level exactly: Confirmed, Strong hypothesis, or Inconclusive. Confirmed requires
-direct evidence in the submitted log; otherwise name what is missing and keep
-the result as a hypothesis. Include plausible alternatives instead of hiding
-uncertainty.
+the submitted log to state the fact itself, not merely to infer causality. Use
+Strong hypothesis for causal explanations unless the log directly proves the
+causal link. Include plausible alternatives instead of hiding uncertainty.
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{
@@ -79,8 +79,8 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     print(f"[AGGREGATOR AGENT] LLM ka raw output: {raw_output}")
 
     try:
-        parsed = json.loads(raw_output)
-        root_cause = parsed["root_cause"]
+        parsed = parse_json_object(raw_output)
+        root_cause = clean_model_text(parsed["root_cause"])
         model_confidence = float(parsed["confidence"])
         if not isinstance(root_cause, str) or not root_cause.strip():
             raise ValueError("root_cause must be a non-empty string")
@@ -92,9 +92,9 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
             certainty = "Inconclusive"
         state["root_cause_confidence"] = round(model_confidence, 2)
         state["root_cause_certainty"] = certainty
-        state["root_cause_evidence"] = parsed.get("supporting_evidence", [])
-        state["root_cause_missing_evidence"] = parsed.get("missing_evidence", [])
-        state["root_cause_alternatives"] = parsed.get("alternatives", [])
+        state["root_cause_evidence"] = [clean_model_text(x) for x in (parsed.get("supporting_evidence", []) if isinstance(parsed.get("supporting_evidence", []), list) else [])]
+        state["root_cause_missing_evidence"] = [clean_model_text(x) for x in (parsed.get("missing_evidence", []) if isinstance(parsed.get("missing_evidence", []), list) else [])]
+        state["root_cause_alternatives"] = [clean_model_text(x) for x in (parsed.get("alternatives", []) if isinstance(parsed.get("alternatives", []), list) else [])]
     except (json.JSONDecodeError, KeyError, ValueError) as e:
         print(f"[AGGREGATOR AGENT] JSON parse error: {e}")
         state["root_cause"] = "Root-cause aggregation failed because the LLM response could not be parsed."

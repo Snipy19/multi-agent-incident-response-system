@@ -309,6 +309,9 @@
         // The writer returns lightweight Markdown. Escape first so LLM output
         // can never become executable HTML, then render only safe formatting.
         return escapeHtml(text)
+            .replace(/â€™/g, "&#39;")
+            .replace(/â€‘|â€“|â€”/g, "-")
+            .replace(/â€¢/g, "&bull;")
             .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
             .replace(/(^|\n)- /g, "$1<span class=\"report-bullet\">&bull;</span> ")
             .replace(/\n/g, "<br>");
