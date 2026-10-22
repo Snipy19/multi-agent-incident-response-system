@@ -48,11 +48,27 @@ def fix_suggester_agent(state: IncidentState) -> IncidentState:
         return {k: v for k, v in state.items() if k != "investigation_findings"}
 
     root_cause = state["root_cause"]
+    raw_log = state["raw_log"]
+    root_cause_evidence = state.get("root_cause_evidence") or []
+    missing_evidence = state.get("root_cause_missing_evidence") or []
+    alternatives = state.get("root_cause_alternatives") or []
 
     prompt = f"""You are a senior DevOps engineer. Based on the following root cause analysis, suggest a specific, actionable fix.
 
 Root cause:
 "{root_cause}"
+
+Original submitted log (the only direct incident evidence):
+{raw_log}
+
+Root-cause supporting evidence:
+{root_cause_evidence}
+
+Root-cause missing validation:
+{missing_evidence}
+
+Competing explanations:
+{alternatives}
 
 Do not present a numeric score as a calibrated probability. Select one certainty
 level exactly: Confirmed, Strong hypothesis, or Inconclusive. A fix is never
@@ -64,6 +80,10 @@ Do not propose adding a service mesh, sidecar, cache layer, replica pool, or
 other new infrastructure unless the submitted evidence directly shows that the
 existing component is misconfigured or capacity-constrained. Do not treat a
 timeout as proof of a DNS, firewall, or network root cause.
+Do not recommend a fix for a secondary symptom as if it resolves the primary
+incident. If the evidence cannot identify one cause, recommend diagnostic and
+containment steps instead of a permanent architecture change. Each proposed
+action must state what observation would justify applying it.
 
 Respond ONLY with a valid JSON object in this exact format, nothing else, no markdown:
 {{

@@ -28,6 +28,7 @@ def aggregator_agent(state: IncidentState) -> IncidentState:
     print("\n[AGGREGATOR AGENT] Combining investigator findings...")
 
     findings = state["investigation_findings"]
+    raw_log = state["raw_log"]
 
     findings_text = "\n".join(
         [f"- [{f['angle']}] {f['finding']} (confidence: {f['confidence']})" for f in findings]
@@ -51,11 +52,24 @@ Multiple specialists investigated this incident from different angles. Here are 
 
 {findings_text}
 
+Original submitted log (the primary evidence; do not add facts that are not present here):
+{raw_log}
+
 Similar patterns observed in real production systems in the past (for reference context):
 {rag_context}
 
 Synthesize these findings into ONE unified root cause explanation. Identify
 which finding(s) are most likely the PRIMARY cause versus contributing/secondary factors.
+
+Evidence discipline:
+- Treat statements in the original log as observed facts.
+- Treat investigator explanations as hypotheses that still require validation.
+- Do not connect two services merely because their symptoms occurred together.
+- Do not infer that a DNS failure affected Kafka, Redis, networking, or another
+  component unless the log or investigator evidence directly connects them.
+- If the evidence does not distinguish between competing causes, say so and
+  choose "Inconclusive" rather than forcing a primary cause.
+- Every causal sentence must be supported by at least one listed evidence item.
 
 Do not present a numeric score as a calibrated probability. Select one certainty
 level exactly: Confirmed, Strong hypothesis, or Inconclusive. Confirmed requires
