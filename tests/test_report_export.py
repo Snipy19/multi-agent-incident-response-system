@@ -1,4 +1,4 @@
-from utils.report_export import build_live_report, build_markdown, build_pdf, build_text
+from utils.report_export import _now, _when, build_live_report, build_markdown, build_pdf, build_text
 
 
 def sample_incident():
@@ -39,6 +39,12 @@ def test_report_formats_are_built_from_incident_data():
     assert "A database connection" in text
     assert pdf.startswith(b"%PDF")
     assert len(pdf) > 1000
+
+
+def test_report_timestamps_display_in_india_time():
+    assert _when("2026-10-22T12:05:00") == "22 Oct 2026, 05:35 PM"
+    assert _when("2026-10-22T12:05:00+00:00") == "22 Oct 2026, 05:35 PM"
+    assert _now()
 
 
 def test_live_report_is_structured_without_inventing_claims():

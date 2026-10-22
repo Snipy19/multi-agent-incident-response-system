@@ -11,8 +11,9 @@ not fabricated.
 
 import io
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from xml.sax.saxutils import escape
+from zoneinfo import ZoneInfo
 
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
@@ -22,6 +23,8 @@ from reportlab.pdfgen import canvas
 from reportlab.platypus import (
     SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Flowable
 )
+
+REPORT_TIMEZONE = ZoneInfo("Asia/Kolkata")
 
 # ---------- THEME ----------
 
@@ -115,13 +118,18 @@ def _level(value):
 
 def _when(iso):
     try:
-        return datetime.fromisoformat(iso).strftime("%d %b %Y, %I:%M %p")
+        parsed = datetime.fromisoformat(iso)
+        # Older records stored naive container-local timestamps. The container
+        # runs in UTC, so interpret those legacy values as UTC before display.
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+        return parsed.astimezone(REPORT_TIMEZONE).strftime("%d %b %Y, %I:%M %p")
     except Exception:
         return iso or "N/A"
 
 
 def _now():
-    return datetime.now().strftime("%d %b %Y, %I:%M %p")
+    return datetime.now(REPORT_TIMEZONE).strftime("%d %b %Y, %I:%M %p")
 
 
 def _angles(incident):
