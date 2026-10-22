@@ -310,7 +310,7 @@
         // can never become executable HTML, then render only safe formatting.
         return escapeHtml(text)
             .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-            .replace(/(^|\n)- /g, "$1<span class=\"report-bullet\">•</span> ")
+            .replace(/(^|\n)- /g, "$1<span class=\"report-bullet\">&bull;</span> ")
             .replace(/\n/g, "<br>");
     }
 

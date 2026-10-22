@@ -48,6 +48,18 @@ _TEXT_REPLACEMENTS = {
 def _clean_text(value):
     # Normalize model text before it reaches PDF, Markdown, or the browser.
     text = "" if value is None else str(value)
+    # Repair text decoded with the wrong legacy encoding before applying the
+    # normal typography replacements (for example ``â€™`` -> ``'``).
+    for _ in range(2):
+        if not any(marker in text for marker in ("Ã", "Â", "â", "ð")):
+            break
+        try:
+            repaired = text.encode("cp1252").decode("utf-8")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            break
+        if repaired == text:
+            break
+        text = repaired
     for old, new in _TEXT_REPLACEMENTS.items():
         text = text.replace(old, new)
     return text
@@ -61,9 +73,26 @@ def _clean_incident(incident):
             cleaned[key] = _clean_text(cleaned[key])
     cleaned["investigation_angles"] = [_clean_text(x) for x in (cleaned.get("investigation_angles") or [])]
     cleaned["investigation_findings"] = [
-        {**finding, "angle": _clean_text(finding.get("angle")), "finding": _clean_text(finding.get("finding"))}
+        {
+            **finding,
+            "angle": _clean_text(finding.get("angle")),
+            "finding": _clean_text(finding.get("finding")),
+            "certainty": _clean_text(finding.get("certainty")),
+            "supporting_evidence": [_clean_text(x) for x in (finding.get("supporting_evidence") or [])],
+            "missing_evidence": [_clean_text(x) for x in (finding.get("missing_evidence") or [])],
+            "alternatives": [_clean_text(x) for x in (finding.get("alternatives") or [])],
+        }
         for finding in (cleaned.get("investigation_findings") or [])
     ]
+    for key in (
+        "root_cause_certainty", "fix_certainty", "root_cause_evidence",
+        "root_cause_missing_evidence", "root_cause_alternatives", "fix_evidence",
+        "fix_missing_evidence",
+    ):
+        if isinstance(cleaned.get(key), list):
+            cleaned[key] = [_clean_text(item) for item in cleaned[key]]
+        elif key in cleaned:
+            cleaned[key] = _clean_text(cleaned[key])
     return cleaned
 
 

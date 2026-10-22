@@ -50,5 +50,22 @@ def test_report_formats_normalize_problematic_typography():
 
     assert "Network-level failure - service's connection was rejected." in markdown
     assert "Network-level failure - service's connection was rejected." in text
+
+
+def test_report_formats_repair_common_stored_mojibake():
+    incident = sample_incident()
+    incident["root_cause"] = (
+        "Service" + chr(0x00e2) + chr(0x20ac) + chr(0x2122) + "s network"
+        + chr(0x00e2) + chr(0x20ac) + chr(0x2018) + "level check failed "
+        + chr(0x00e2) + chr(0x20ac) + chr(0x201d) + " retry required."
+    )
+
+    markdown = build_markdown(incident)
+    text = build_text(incident)
+
+    assert "Service" in markdown and "network-level" in markdown
+    assert "retry required." in markdown
+    assert "Service" in text and "network-level" in text
+    assert "retry required." in text
     assert "â" not in markdown
     assert "â" not in text
