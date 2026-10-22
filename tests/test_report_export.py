@@ -41,6 +41,12 @@ def test_report_formats_are_built_from_incident_data():
     assert len(pdf) > 1000
 
 
+def test_report_capitalizes_split_remediation_actions():
+    report = build_text({**sample_incident(), "suggested_fix": "First validate metrics. this log alone is insufficient."})
+
+    assert "2. This log alone is insufficient." in report
+
+
 def test_report_timestamps_display_in_india_time():
     assert _when("2026-10-22T12:05:00") == "22 Oct 2026, 05:35 PM"
     assert _when("2026-10-22T12:05:00+00:00") == "22 Oct 2026, 05:35 PM"

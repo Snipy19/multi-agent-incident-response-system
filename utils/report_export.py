@@ -287,7 +287,7 @@ def _split_actions(text):
     if not text:
         return []
 
-    raw = re.split(r"(?<=\.)\s+(?=[A-Z])", text)
+    raw = re.split(r"(?<=\.)\s+(?=[A-Za-z])", text)
     merged = []
     for piece in raw:
         if merged and _ABBREV_END.search(merged[-1]):
@@ -300,6 +300,7 @@ def _split_actions(text):
         for sub in re.split(r";\s+", piece):
             sub = sub.strip()
             if sub:
+                sub = sub[:1].upper() + sub[1:]
                 actions.append(sub if sub.endswith((".", "!", "?")) else sub + ".")
     return actions
 

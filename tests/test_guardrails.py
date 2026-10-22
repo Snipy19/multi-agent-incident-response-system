@@ -3,6 +3,7 @@ from utils.guardrails import (
     clean_model_text,
     constrain_cross_service_causality,
     constrain_dns_remediation,
+    constrain_investigator_causality,
     generated_report_input_reason,
     parse_investigator_output,
     parse_json_object,
@@ -106,6 +107,17 @@ def test_dns_infrastructure_fix_requires_resolver_evidence():
 
     assert guarded is True
     assert "does not justify adding DNS infrastructure" in fix
+
+
+def test_investigator_cannot_link_dns_to_separate_kafka_symptom():
+    finding, guarded = constrain_investigator_causality(
+        "DNS failures are causing Kafka consumer lag and rebalances.",
+        "DNS lookups for db-primary.internal failed. Kafka consumer lag increased.",
+        "Infrastructure",
+    )
+
+    assert guarded is True
+    assert "not sufficient to establish" in finding
 
 
 def test_calibration_uses_agreement_and_evidence_breadth():

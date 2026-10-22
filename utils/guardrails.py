@@ -114,7 +114,7 @@ def constrain_cross_service_causality(root_cause: str, raw_log: str) -> tuple[st
     text = conclusion.casefold()
     if not all(term in log for term in ("dns", "db-primary", "redis", "kafka")):
         return conclusion, False
-    if not any(term in text for term in ("same dns", "dns instability", "dns ... kafka", "dns ... redis")):
+    if not _unsupported_dns_service_link(text, log):
         return conclusion, False
 
     guarded = (
@@ -126,6 +126,40 @@ def constrain_cross_service_causality(root_cause: str, raw_log: str) -> tuple[st
         "separate validation."
     )
     return guarded, True
+
+
+def _unsupported_dns_service_link(claim: str, log: str) -> bool:
+    """Detect DNS causality claims not directly connected in the submitted log."""
+    causal = any(term in claim for term in ("caused", "causing", "exacerbated", "due to", "same dns", "dns instability"))
+    if "dns" not in claim or not causal:
+        return False
+    targets = [target for target in ("redis", "kafka", "consumer lag") if target in claim]
+    if not targets:
+        return False
+    # A direct link requires DNS and the target to appear in the same log
+    # sentence. Separate symptoms in adjacent sentences are not proof.
+    sentences = re.split(r"(?<=[.!?])\s+|[;\n]+", log)
+    return any(
+        target in targets
+        and not any("dns" in sentence and target in sentence for sentence in sentences)
+        for target in targets
+    )
+
+
+def constrain_investigator_causality(finding: str, evidence: str, angle: str) -> tuple[str, bool]:
+    """Downgrade an investigator claim when its cross-service link is unproven."""
+    claim = clean_model_text(finding).strip()
+    log = str(evidence or "").casefold()
+    if not all(term in log for term in ("dns", "db-primary")):
+        return claim, False
+    if not _unsupported_dns_service_link(claim.casefold(), log):
+        return claim, False
+    return (
+        f"The {angle} evidence is not sufficient to establish that DNS caused "
+        "the separate Redis or Kafka symptoms; those relationships require "
+        "direct service-specific validation.",
+        True,
+    )
 
 
 def constrain_dns_remediation(suggested_fix: str, raw_log: str) -> tuple[str, bool]:
@@ -200,9 +234,23 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
             return []
         return [item.strip() for item in value if isinstance(item, str) and item.strip()][:5]
 
+    finding_text, causality_guarded = constrain_investigator_causality(
+        finding.strip(), evidence, angle
+    )
+    if causality_guarded:
+        confidence = min(confidence, 0.35)
+        certainty = "Inconclusive"
+        missing = clean_list(parsed.get("missing_evidence"))
+        missing.append("Direct DNS-to-service evidence for the claimed Redis or Kafka impact")
+        alternatives = clean_list(parsed.get("alternatives"))
+        alternatives.append("An independent cache, broker, or consumer-capacity issue")
+    else:
+        missing = clean_list(parsed.get("missing_evidence"))
+        alternatives = clean_list(parsed.get("alternatives"))
+
     return {
         "angle": angle,
-        "finding": clean_model_text(finding.strip()),
+        "finding": finding_text,
         "confidence": round(confidence, 2),
         "confidence_reason": clean_model_text(
             parsed.get("confidence_reason")
@@ -210,8 +258,8 @@ def parse_investigator_output(raw_output: str, angle: str, evidence: str) -> dic
         ),
         "certainty": certainty,
         "supporting_evidence": [clean_model_text(x) for x in clean_list(parsed.get("supporting_evidence"))],
-        "missing_evidence": [clean_model_text(x) for x in clean_list(parsed.get("missing_evidence"))],
-        "alternatives": [clean_model_text(x) for x in clean_list(parsed.get("alternatives"))],
+        "missing_evidence": [clean_model_text(x) for x in missing[:5]],
+        "alternatives": [clean_model_text(x) for x in alternatives[:5]],
     }
 
 
