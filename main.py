@@ -8,8 +8,9 @@ so local OAuth uses the same origin as the API.
 
 import os
 import uuid
-import random
+import secrets
 import json
+import re
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -113,6 +114,26 @@ class ResetPasswordRequest(BaseModel):
     new_password: str = Field(..., min_length=8, max_length=128)
 
 
+class VerifyOtpRequest(BaseModel):
+    username: str = Field(..., min_length=3, max_length=32)
+    otp: str = Field(..., min_length=6, max_length=6, pattern=r"^\d{6}$")
+
+
+def password_policy_error(password: str) -> str | None:
+    """Return a user-safe explanation when a password is too weak."""
+    if len(password) < 8:
+        return "Password must be at least 8 characters."
+    if not re.search(r"[A-Z]", password):
+        return "Password must contain at least one uppercase letter."
+    if not re.search(r"[a-z]", password):
+        return "Password must contain at least one lowercase letter."
+    if not re.search(r"\d", password):
+        return "Password must contain at least one number."
+    if not re.search(r"[^A-Za-z0-9\s]", password):
+        return "Password must contain at least one special symbol."
+    return None
+
+
 # ---------- AUTH ENDPOINTS (username/password) ----------
 
 @app.post("/signup")
@@ -121,8 +142,9 @@ def signup(request: SignupRequest):
         raise HTTPException(status_code=400, detail="Username already taken")
     if get_user_by_email(request.email):
         raise HTTPException(status_code=400, detail="Email already registered")
-    if len(request.password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    password_error = password_policy_error(request.password)
+    if password_error:
+        raise HTTPException(status_code=400, detail=password_error)
 
     user_id = str(uuid.uuid4())
     password_hash = hash_password(request.password)
@@ -198,40 +220,51 @@ def google_login(request: GoogleLoginRequest):
 @app.post("/forgot-password")
 def forgot_password(request: ForgotPasswordRequest):
     user = get_user_by_username(request.username)
-    # Use the same response whether or not the user exists to prevent
-    # account enumeration.
-    if not user or not user["email"]:
-        return {"message": "If this account exists, an OTP has been sent to its registered email."}
+    # This product explicitly confirms the account before moving the user to
+    # the OTP step, so the browser never asks for a code that cannot arrive.
+    if not user:
+        raise HTTPException(status_code=404, detail="No account exists for this username.")
+    if not user["email"]:
+        raise HTTPException(status_code=400, detail="This account has no recovery email configured.")
 
-    otp = str(random.randint(100000, 999999))
+    otp = f"{secrets.randbelow(1_000_000):06d}"
     expires_at = (datetime.now() + timedelta(minutes=10)).isoformat()
     save_otp(request.username, otp, expires_at)
 
     try:
         send_otp_email(user["email"], otp)
     except Exception as e:
+        delete_otp(request.username)
         print(f"[FORGOT PASSWORD] Failed to send email: {e}")
-        raise HTTPException(status_code=500, detail="Could not send OTP email. Please try again.")
+        raise HTTPException(status_code=503, detail="Could not send OTP email. Check the configured recovery mailbox and try again.")
 
-    return {"message": "If this account exists, an OTP has been sent to its registered email."}
+    return {"message": "OTP sent to the registered recovery email."}
+
+
+def _validate_otp(username: str, otp: str):
+    record = get_otp(username)
+    if record is None:
+        raise HTTPException(status_code=400, detail="No OTP request found. Please request a new one.")
+    if datetime.now() > datetime.fromisoformat(record["expires_at"]):
+        delete_otp(username)
+        raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
+    if not secrets.compare_digest(record["otp"], otp):
+        raise HTTPException(status_code=400, detail="Incorrect OTP.")
+    return record
+
+
+@app.post("/verify-reset-otp")
+def verify_reset_otp(request: VerifyOtpRequest):
+    _validate_otp(request.username, request.otp)
+    return {"message": "OTP verified. You may now choose a new password."}
 
 
 @app.post("/reset-password")
 def reset_password(request: ResetPasswordRequest):
-    record = get_otp(request.username)
-
-    if record is None:
-        raise HTTPException(status_code=400, detail="No OTP request found. Please request a new one.")
-
-    if datetime.now() > datetime.fromisoformat(record["expires_at"]):
-        delete_otp(request.username)
-        raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
-
-    if record["otp"] != request.otp:
-        raise HTTPException(status_code=400, detail="Incorrect OTP.")
-
-    if len(request.new_password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+    _validate_otp(request.username, request.otp)
+    password_error = password_policy_error(request.new_password)
+    if password_error:
+        raise HTTPException(status_code=400, detail=password_error)
 
     new_hash = hash_password(request.new_password)
     update_user_password(request.username, new_hash)

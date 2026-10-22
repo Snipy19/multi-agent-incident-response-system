@@ -7,6 +7,7 @@ database keeps the tests isolated from the developer's local incident data.
 """
 
 from pathlib import Path
+from datetime import datetime, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -44,6 +45,57 @@ def test_health_endpoint_is_public(api_client: TestClient):
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+
+
+def test_forgot_password_rejects_unknown_username_before_otp_step(api_client):
+    """Unknown accounts must not advance to a form for an undeliverable OTP."""
+    response = api_client.post("/forgot-password", json={"username": "missing-user"})
+
+    assert response.status_code == 404
+    assert "No account exists" in response.json()["detail"]
+
+
+def test_reset_flow_verifies_otp_before_accepting_password(api_client):
+    """OTP verification and password policy are enforced by real HTTP routes."""
+    create_account(api_client, "resetuser", "resetuser@example.com")
+    expires_at = (datetime.now() + timedelta(minutes=10)).isoformat()
+    database.save_otp("resetuser", "123456", expires_at)
+
+    invalid_otp = api_client.post(
+        "/verify-reset-otp", json={"username": "resetuser", "otp": "000000"}
+    )
+    assert invalid_otp.status_code == 400
+
+    verified = api_client.post(
+        "/verify-reset-otp", json={"username": "resetuser", "otp": "123456"}
+    )
+    assert verified.status_code == 200
+
+    weak_password = api_client.post(
+        "/reset-password",
+        json={"username": "resetuser", "otp": "123456", "new_password": "password"},
+    )
+    assert weak_password.status_code == 400
+    assert "uppercase" in weak_password.json()["detail"]
+
+    reset = api_client.post(
+        "/reset-password",
+        json={
+            "username": "resetuser",
+            "otp": "123456",
+            "new_password": "NewStrong123!",
+        },
+    )
+    assert reset.status_code == 200
+
+    old_login = api_client.post(
+        "/login", json={"username": "resetuser", "password": "StrongPass123!"}
+    )
+    new_login = api_client.post(
+        "/login", json={"username": "resetuser", "password": "NewStrong123!"}
+    )
+    assert old_login.status_code == 401
+    assert new_login.status_code == 200
 
 
 def test_google_config_uses_backend_environment(api_client, monkeypatch):
