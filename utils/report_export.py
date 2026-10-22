@@ -219,7 +219,7 @@ def build_live_report(state: dict) -> str:
             _clean_text(finding.get("finding") or "No finding was returned."),
             "",
             f"- Certainty: {_clean_text(finding.get('certainty') or 'Inconclusive')}",
-            f"- Model estimate: {_pct(finding.get('confidence'))}",
+            f"- Evidence estimate: {_pct(finding.get('confidence'))}",
             f"- Confidence basis: {_clean_text(finding.get('confidence_reason') or 'Not provided')}",
         ])
         for label, key in (("Supporting evidence", "supporting_evidence"), ("Missing validation", "missing_evidence"), ("Alternative explanations", "alternatives")):
@@ -234,7 +234,7 @@ def build_live_report(state: dict) -> str:
         _clean_text(incident.get("root_cause") or "No root-cause assessment was generated."),
         "",
         f"- Certainty: {_clean_text(incident.get('root_cause_certainty') or 'Inconclusive')}",
-        f"- Model estimate: {_pct(incident.get('root_cause_confidence'))}",
+        f"- Evidence estimate: {_pct(incident.get('root_cause_confidence'))}",
         f"- Confidence basis: {_clean_text(incident.get('root_cause_confidence_reason') or 'Not provided')}",
     ])
     for label, key in (("Supporting evidence", "root_cause_evidence"), ("Missing validation", "root_cause_missing_evidence"), ("Alternative explanations", "root_cause_alternatives")):
@@ -249,7 +249,7 @@ def build_live_report(state: dict) -> str:
         _clean_text(incident.get("suggested_fix") or "No remediation recommendation was generated."),
         "",
         f"- Certainty: {_clean_text(incident.get('fix_certainty') or 'Inconclusive')}",
-        f"- Model estimate: {_pct(incident.get('fix_confidence'))}",
+        f"- Evidence estimate: {_pct(incident.get('fix_confidence'))}",
         f"- Confidence basis: {_clean_text(incident.get('fix_confidence_reason') or 'Not provided')}",
     ])
     for label, key in (("Supporting evidence", "fix_evidence"), ("Missing validation", "fix_missing_evidence")):
@@ -348,7 +348,8 @@ def build_markdown(incident: dict) -> str:
         L.append(f"| {_md_cell(f.get('angle'))} | {_md_cell(f.get('finding'))} | {_pct(f.get('confidence'))} |")
 
     L += ["", "## 4. Root Cause Analysis", "", incident.get("root_cause") or "N/A", "",
-          f"*Confidence: {_pct(rc)} ({_level(rc)})*", "",
+          f"*Evidence estimate: {_pct(rc)} ({_level(rc)})*",
+          f"*Confidence basis: {incident.get('root_cause_confidence_reason') or 'Not provided'}*", "",
           "## 5. Recommended Remediation", ""]
 
     if len(actions) > 1:
@@ -356,7 +357,8 @@ def build_markdown(incident: dict) -> str:
     else:
         L.append(incident.get("suggested_fix") or "N/A")
 
-    L += ["", f"*Confidence: {_pct(fc)} ({_level(fc)})*", "",
+    L += ["", f"*Evidence estimate: {_pct(fc)} ({_level(fc)})*",
+          f"*Confidence basis: {incident.get('fix_confidence_reason') or 'Not provided'}*", "",
           f"> **Review status:** {_review_text(incident.get('needs_human_review'))}.", "",
           "## 6. Methodology & Limitations", "", pipeline, ""]
     L += [f"- {x}" for x in limits]
@@ -382,8 +384,10 @@ def build_text(incident: dict) -> str:
         f"Analysed on           : {_when(incident.get('created_at'))}",
         f"Report generated      : {_now()}",
         f"Agents deployed       : {_agent_count(incident)}",
-        f"Root-cause confidence : {_pct(rc)} ({_level(rc)})",
-        f"Fix confidence        : {_pct(fc)} ({_level(fc)})",
+        f"Root-cause evidence estimate : {_pct(rc)} ({_level(rc)})",
+        f"Root-cause confidence basis  : {incident.get('root_cause_confidence_reason') or 'Not provided'}",
+        f"Fix evidence estimate        : {_pct(fc)} ({_level(fc)})",
+        f"Fix confidence basis         : {incident.get('fix_confidence_reason') or 'Not provided'}",
         f"Review status         : {_review_text(incident.get('needs_human_review'))}",
         "",
         "1. EXECUTIVE SUMMARY", thin, _executive_summary(incident), "",
@@ -399,13 +403,15 @@ def build_text(incident: dict) -> str:
         L.append("")
 
     L += ["4. ROOT CAUSE ANALYSIS", thin, incident.get("root_cause") or "N/A",
-          f"(confidence {_pct(rc)})", "",
+          f"(evidence estimate {_pct(rc)})",
+          f"Confidence basis: {incident.get('root_cause_confidence_reason') or 'Not provided'}", "",
           "5. RECOMMENDED REMEDIATION", thin]
     if len(actions) > 1:
         L += [f"{i}. {a}" for i, a in enumerate(actions, 1)]
     else:
         L.append(incident.get("suggested_fix") or "N/A")
-    L += [f"(confidence {_pct(fc)})", "",
+    L += [f"(evidence estimate {_pct(fc)})",
+          f"Confidence basis: {incident.get('fix_confidence_reason') or 'Not provided'}", "",
           "6. METHODOLOGY & LIMITATIONS", thin, pipeline, ""]
     L += [f"- {x}" for x in limits]
     L += ["", bar, f"Generated automatically by Incident Response Console on {_now()}.", ""]
@@ -718,6 +724,7 @@ def build_pdf(incident: dict) -> bytes:
     story.append(Paragraph(_p(incident.get("root_cause") or "N/A"), body))
     story.append(Spacer(1, 6))
     story.append(_conf_row(rc, note))
+    story.append(Paragraph(_p(incident.get("root_cause_confidence_reason") or "Confidence basis not provided."), note))
 
     # ---- 5. Remediation ----
     story += _section("5. Recommended Remediation", heading)
@@ -736,6 +743,7 @@ def build_pdf(incident: dict) -> bytes:
         story.append(Paragraph(_p(incident.get("suggested_fix") or "N/A"), body))
     story.append(Spacer(1, 6))
     story.append(_conf_row(fc, note))
+    story.append(Paragraph(_p(incident.get("fix_confidence_reason") or "Confidence basis not provided."), note))
     story.append(Spacer(1, 10))
 
     if needs_review:

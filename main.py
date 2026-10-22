@@ -355,8 +355,10 @@ def _sse_event(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _stage_event(node: str, update: dict) -> dict:
+def _stage_event(node: str, update: dict) -> dict | None:
     """Translate a LangGraph node update into safe progress text."""
+    if node == "investigation_router":
+        return None
     messages = {
         "triage_planner": "Triage planner is detecting anomalies and selecting evidence-grounded investigation angles.",
         "aggregator": "Aggregator is comparing investigator evidence and forming a root-cause hypothesis.",
@@ -409,7 +411,9 @@ def stream_analysis(request: LogRequest, current_user: dict = Depends(get_curren
                         for key, value in node_update.items()
                         if key != "investigation_findings"
                     })
-                    yield _sse_event(_stage_event(node, node_update))
+                    stage_event = _stage_event(node, node_update)
+                    if stage_event:
+                        yield _sse_event(stage_event)
 
             incident_id = str(uuid.uuid4())
             save_incident(incident_id, current_user["user_id"], current_state)
