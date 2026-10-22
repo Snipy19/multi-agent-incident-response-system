@@ -25,8 +25,10 @@ def incident_result():
         ],
         "root_cause": "The upstream service was unavailable.",
         "root_cause_confidence": 0.8,
+        "root_cause_confidence_reason": "The timeout is directly observed, but reachability is unverified.",
         "suggested_fix": "Check upstream service health.",
         "fix_confidence": 0.75,
+        "fix_confidence_reason": "The fix validates the dependency before changing production.",
         "needs_human_review": False,
         "final_report": "Incident report",
     }
@@ -58,6 +60,8 @@ def test_incident_round_trip_is_private_to_user(isolated_database):
     assert stored["investigation_angles"] == ["API", "Network"]
     assert stored["investigation_findings"][0]["confidence"] == 0.9
     assert stored["root_cause"] == "The upstream service was unavailable."
+    assert "directly observed" in stored["root_cause_confidence_reason"]
+    assert "validates the dependency" in stored["fix_confidence_reason"]
 
     assert isolated_database.get_incident_by_id("incident-1", "different-user") is None
     assert isolated_database.get_all_incidents("different-user") == []

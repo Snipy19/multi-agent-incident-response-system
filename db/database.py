@@ -6,7 +6,7 @@ SQLite persistence for password/Google users, incidents, and password-reset OTPs
 
 import sqlite3
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from contextlib import contextmanager
 
 DB_PATH = "db/incidents.db"
@@ -50,12 +50,22 @@ def init_db():
                 investigation_findings TEXT,
                 root_cause TEXT,
                 root_cause_confidence REAL,
+                root_cause_confidence_reason TEXT,
                 suggested_fix TEXT,
                 fix_confidence REAL,
+                fix_confidence_reason TEXT,
                 needs_human_review INTEGER,
                 final_report TEXT
             )
         """)
+        # Existing local databases predate the confidence-basis fields. Keep
+        # them usable and make downloaded reports match the live result.
+        columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()
+        }
+        for column in ("root_cause_confidence_reason", "fix_confidence_reason"):
+            if column not in columns:
+                conn.execute(f"ALTER TABLE incidents ADD COLUMN {column} TEXT")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS password_reset_otps (
                 username TEXT PRIMARY KEY,
@@ -153,13 +163,14 @@ def save_incident(incident_id: str, user_id: str, result: dict):
                 id, user_id, created_at, raw_log, is_anomaly, anomaly_reason,
                 investigation_angles, investigation_findings,
                 root_cause, root_cause_confidence,
-                suggested_fix, fix_confidence,
+                root_cause_confidence_reason, suggested_fix, fix_confidence,
+                fix_confidence_reason,
                 needs_human_review, final_report
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             incident_id,
             user_id,
-            datetime.now().isoformat(),
+            datetime.now(timezone.utc).isoformat(),
             result["raw_log"],
             int(result["is_anomaly"]) if result["is_anomaly"] is not None else None,
             result["anomaly_reason"],
@@ -167,8 +178,10 @@ def save_incident(incident_id: str, user_id: str, result: dict):
             json.dumps(result["investigation_findings"]),
             result["root_cause"],
             result["root_cause_confidence"],
+            result.get("root_cause_confidence_reason"),
             result["suggested_fix"],
             result["fix_confidence"],
+            result.get("fix_confidence_reason"),
             int(result["needs_human_review"]) if result["needs_human_review"] is not None else None,
             result["final_report"]
         ))
