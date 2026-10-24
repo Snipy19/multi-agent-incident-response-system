@@ -58,6 +58,21 @@ def test_liveness_and_readiness_probes_are_real(api_client: TestClient):
     assert ready.json() == {"status": "ready"}
 
 
+def test_cors_allows_authenticated_delete_preflight(api_client: TestClient):
+    """A separately hosted frontend can preflight the ownership-scoped delete."""
+    response = api_client.options(
+        "/incidents/example",
+        headers={
+            "Origin": "http://127.0.0.1:8000",
+            "Access-Control-Request-Method": "DELETE",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.headers["access-control-allow-origin"] == "http://127.0.0.1:8000"
+    assert "DELETE" in response.headers["access-control-allow-methods"]
+
+
 def test_forgot_password_rejects_unknown_username_before_otp_step(api_client):
     """Unknown accounts must not advance to a form for an undeliverable OTP."""
     response = api_client.post("/forgot-password", json={"username": "missing-user"})
