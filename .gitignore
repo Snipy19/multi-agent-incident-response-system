@@ -4,7 +4,7 @@ __pycache__/
 *.pyc
 Outh.json
 reports/
-db/incidents.db
+db/*.db
 .pytest_runtime/
 .pytest_tmp/
 .pytest_cache/

@@ -14,9 +14,11 @@ services:
     env_file:
       - .env
     environment:
-      ENVIRONMENT: development
-      CORS_ORIGINS: http://127.0.0.1:8000,http://localhost:8000
-      PORT: 8000
+      # Keep local defaults, but allow deployment .env values to control the
+      # security mode, allowed browser origins, and listening port.
+      ENVIRONMENT: ${ENVIRONMENT:-development}
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:8000,http://localhost:8000}
+      PORT: ${PORT:-8000}
       TOKENIZERS_PARALLELISM: "false"
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"
