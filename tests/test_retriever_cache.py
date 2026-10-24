@@ -5,10 +5,14 @@ from vectorstore import retriever
 
 
 def test_runtime_metadata_is_data_only_json():
+    import faiss
+
     metadata_path = Path("vectorstore/hdfs_metadata.json")
     records = json.loads(metadata_path.read_text(encoding="utf-8"))
+    index = faiss.read_index("vectorstore/hdfs_index.faiss")
 
     assert records
+    assert index.ntotal == len(records)
     assert all("EventTemplate" in record for record in records)
     assert not Path("vectorstore/hdfs_metadata.pkl").exists()
 
