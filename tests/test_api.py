@@ -74,6 +74,43 @@ def test_analysis_worker_mode_is_configurable(monkeypatch):
         assert analysis_worker_enabled() is False
 
 
+def test_production_config_rejects_incomplete_or_local_values(monkeypatch):
+    from main import validate_runtime_config
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    for name in (
+        "JWT_SECRET_KEY", "DATABASE_URL", "GROQ_API_KEY", "GOOGLE_CLIENT_ID",
+        "EMAIL_ADDRESS", "EMAIL_APP_PASSWORD", "CORS_ORIGINS",
+    ):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(RuntimeError, match="Missing required production configuration"):
+        validate_runtime_config()
+
+    monkeypatch.setenv("JWT_SECRET_KEY", "production-test-secret")
+    monkeypatch.setenv("DATABASE_URL", "sqlite:///unsafe.db")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client")
+    monkeypatch.setenv("EMAIL_ADDRESS", "alerts@example.com")
+    monkeypatch.setenv("EMAIL_APP_PASSWORD", "test-app-password")
+    monkeypatch.setenv("CORS_ORIGINS", "http://127.0.0.1:8000")
+    with pytest.raises(RuntimeError, match="DATABASE_URL must point to PostgreSQL"):
+        validate_runtime_config()
+
+
+def test_production_config_accepts_explicit_real_services(monkeypatch):
+    from main import validate_runtime_config
+
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("JWT_SECRET_KEY", "production-test-secret")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://db.example.com/incident")
+    monkeypatch.setenv("GROQ_API_KEY", "test-key")
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "test-client")
+    monkeypatch.setenv("EMAIL_ADDRESS", "alerts@example.com")
+    monkeypatch.setenv("EMAIL_APP_PASSWORD", "test-app-password")
+    monkeypatch.setenv("CORS_ORIGINS", "https://console.example.com")
+    validate_runtime_config()
+
+
 def test_liveness_and_readiness_probes_are_real(api_client: TestClient):
     """Health probes distinguish a live process from a database-ready service."""
     assert api_client.get("/health/live").json() == {"status": "alive"}

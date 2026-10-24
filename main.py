@@ -65,6 +65,38 @@ def analysis_worker_enabled() -> bool:
     }
 
 
+def validate_runtime_config() -> None:
+    """Fail fast on unsafe production configuration, without restricting local runs."""
+    if os.getenv("ENVIRONMENT", "development").strip().lower() != "production":
+        return
+
+    required = {
+        "JWT_SECRET_KEY": os.getenv("JWT_SECRET_KEY", "").strip(),
+        "DATABASE_URL": os.getenv("DATABASE_URL", "").strip(),
+        "GROQ_API_KEY": os.getenv("GROQ_API_KEY", "").strip(),
+        "GOOGLE_CLIENT_ID": os.getenv("GOOGLE_CLIENT_ID", "").strip(),
+        "EMAIL_ADDRESS": os.getenv("EMAIL_ADDRESS", "").strip(),
+        "EMAIL_APP_PASSWORD": os.getenv("EMAIL_APP_PASSWORD", "").strip(),
+        "CORS_ORIGINS": os.getenv("CORS_ORIGINS", "").strip(),
+    }
+    missing = [name for name, value in required.items() if not value]
+    if missing:
+        raise RuntimeError(
+            "Missing required production configuration: " + ", ".join(missing)
+        )
+
+    database_url = required["DATABASE_URL"].lower()
+    if not database_url.startswith(("postgres://", "postgresql://")):
+        raise RuntimeError("DATABASE_URL must point to PostgreSQL in production")
+
+    origins = [origin.strip().lower() for origin in required["CORS_ORIGINS"].split(",")]
+    if "*" in origins or any("localhost" in origin or "127.0.0.1" in origin for origin in origins):
+        raise RuntimeError("CORS_ORIGINS must contain only real production origins")
+
+
+validate_runtime_config()
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     """Optionally run the durable worker alongside, or apart from, the API."""

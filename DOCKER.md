@@ -78,6 +78,11 @@ AWS deployment, remove that mount and set `DATABASE_URL` to the RDS
 PostgreSQL connection string instead. Leaving `DATABASE_URL` empty keeps the
 local SQLite path for development.
 
+When `ENVIRONMENT=production`, startup requires the real JWT, PostgreSQL,
+Groq, Google OAuth, email, and CORS settings. Localhost origins, wildcard CORS,
+SQLite, or missing credentials fail fast instead of allowing a partially fake
+production deployment to start.
+
 For a split deployment, set `ANALYSIS_WORKER_ENABLED=false` on the API service
 and run the same image with:
 
