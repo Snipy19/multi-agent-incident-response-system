@@ -51,7 +51,7 @@ class AnalysisWorker:
                 # A deployment may briefly point at a database before its
                 # migration has run. Keep the worker alive and retry instead
                 # of losing the queue thread to an unhandled exception.
-                print(f"[JOBS] Queue unavailable; retrying: {exc}")
+                print(f"[JOBS] Queue unavailable; retrying: {type(exc).__name__}")
                 self._stop.wait(self.poll_seconds)
                 continue
             if job is None:
@@ -123,7 +123,10 @@ class AnalysisWorker:
                 "message": "Analysis failed. Check the service logs for details.",
             })
             fail_analysis_job(job["id"], str(exc))
-            print(f"[JOBS] Analysis job {job['id']} failed: {exc}")
+            print(
+                f"[JOBS] Analysis job {job['id']} failed: "
+                f"{type(exc).__name__}"
+            )
 
 
 _worker = AnalysisWorker()

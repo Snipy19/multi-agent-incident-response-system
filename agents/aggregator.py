@@ -39,7 +39,7 @@ def aggregator_agent(state: IncidentState) -> IncidentState:
         [f"- [{f['angle']}] {f['finding']} (confidence: {f['confidence']})" for f in findings]
     )
 
-    print(f"[AGGREGATOR AGENT] Received {len(findings)} findings:\n{findings_text}")
+    print(f"[AGGREGATOR AGENT] Received {len(findings)} investigator finding(s)")
 
     similar_patterns = retrieve_similar_patterns(raw_log, top_k=3)
     rag_context = "\n".join(
@@ -96,7 +96,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     response = invoke_with_retry(llm, prompt)
     raw_output = response.content.strip()
 
-    print(f"[AGGREGATOR AGENT] LLM ka raw output: {raw_output}")
+    print(
+        "[AGGREGATOR AGENT] Received LLM response "
+        f"({len(raw_output)} characters); validating structured output"
+    )
 
     try:
         parsed = parse_json_object(raw_output)
@@ -132,7 +135,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
                 "A separate network, broker, cache, or consumer-capacity issue affecting those services"
             )
     except (json.JSONDecodeError, KeyError, ValueError) as e:
-        print(f"[AGGREGATOR AGENT] JSON parse error: {e}")
+        print(f"[AGGREGATOR AGENT] Structured response failed: {type(e).__name__}")
         state["root_cause"] = "Root-cause aggregation failed because the LLM response could not be parsed."
         state["root_cause_confidence"] = 0.0
         state["root_cause_confidence_reason"] = "No confidence assessment was available because the aggregator response was invalid."
@@ -141,6 +144,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         state["root_cause_missing_evidence"] = ["A valid aggregator response"]
         state["root_cause_alternatives"] = []
 
-    print(f"[AGGREGATOR AGENT] Final root cause: {state['root_cause']} (confidence: {state['root_cause_confidence']})")
+    print(
+        "[AGGREGATOR AGENT] Root-cause assessment validated "
+        f"(certainty: {state['root_cause_certainty']}, "
+        f"confidence: {state['root_cause_confidence']})"
+    )
 
     return {k: v for k, v in state.items() if k != "investigation_findings"}

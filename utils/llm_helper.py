@@ -30,9 +30,16 @@ def invoke_with_retry(llm, prompt: str, max_retries: int = 6, base_delay: float 
                 return response
             except (RateLimitError, APIError) as e:
                 if attempt == max_retries - 1:
-                    print(f"[LLM HELPER] Maximum retries exhausted: {e}")
+                    print(
+                        "[LLM HELPER] Maximum retries exhausted: "
+                        f"{type(e).__name__}"
+                    )
                     raise
 
                 wait_time = base_delay * (2 ** attempt)  # 3s, 6s, 12s, 24s, 48s...
-                print(f"[LLM HELPER] Transient API error; retrying in {wait_time}s (attempt {attempt + 1}/{max_retries})...")
+                print(
+                    "[LLM HELPER] Transient API error "
+                    f"({type(e).__name__}); retrying in {wait_time}s "
+                    f"(attempt {attempt + 1}/{max_retries})..."
+                )
                 time.sleep(wait_time)

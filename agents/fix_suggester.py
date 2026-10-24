@@ -103,7 +103,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     response = invoke_with_retry(llm, prompt)
     raw_output = response.content.strip()
 
-    print(f"[FIX SUGGESTER AGENT] LLM ka raw output: {raw_output}")
+    print(
+        "[FIX SUGGESTER AGENT] Received LLM response "
+        f"({len(raw_output)} characters); validating structured output"
+    )
 
     try:
         parsed = parse_json_object(raw_output)
@@ -140,7 +143,7 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         )
 
     except (json.JSONDecodeError, KeyError, ValueError) as e:
-        print(f"[FIX SUGGESTER AGENT] JSON parse error: {e}")
+        print(f"[FIX SUGGESTER AGENT] Structured response failed: {type(e).__name__}")
         state["suggested_fix"] = "A remediation recommendation could not be generated because the LLM response could not be parsed."
         state["fix_confidence"] = 0.0
         state["fix_confidence_reason"] = "No confidence assessment was available because the remediation response was invalid."
@@ -149,6 +152,11 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         state["fix_missing_evidence"] = ["A valid structured remediation response"]
         state["needs_human_review"] = True
 
-    print(f"[FIX SUGGESTER AGENT] Fix: {state['suggested_fix']} (confidence: {state['fix_confidence']}, human review: {state['needs_human_review']})")
+    print(
+        "[FIX SUGGESTER AGENT] Remediation assessment validated "
+        f"(certainty: {state['fix_certainty']}, "
+        f"confidence: {state['fix_confidence']}, "
+        f"human review: {state['needs_human_review']})"
+    )
 
     return {k: v for k, v in state.items() if k != "investigation_findings"}

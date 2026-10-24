@@ -349,7 +349,7 @@ def google_login(request: GoogleLoginRequest, response: Response, http_request: 
     except ValueError as exc:
         # Keep token contents out of logs, but record the verifier reason for
         # diagnosing audience, issuer, expiry, or malformed-token problems.
-        print(f"[AUTH] Google token verification failed: {exc}")
+        print(f"[AUTH] Google token verification failed: {type(exc).__name__}")
         raise HTTPException(status_code=401, detail="Invalid Google token")
 
     google_id = idinfo["sub"]
@@ -419,7 +419,7 @@ def forgot_password(request: ForgotPasswordRequest):
         send_otp_email(user["email"], otp)
     except Exception as e:
         delete_otp(request.username)
-        print(f"[FORGOT PASSWORD] Failed to send email: {e}")
+        print(f"[FORGOT PASSWORD] Failed to send email: {type(e).__name__}")
         raise HTTPException(status_code=503, detail="Could not send OTP email. Check the configured recovery mailbox and try again.")
 
     return {"message": "OTP sent to the registered recovery email."}
@@ -487,7 +487,7 @@ def readiness_check():
         with get_connection() as conn:
             conn.execute("SELECT 1").fetchone()
     except Exception as exc:
-        print(f"[HEALTH] Readiness check failed: {exc}")
+        print(f"[HEALTH] Readiness check failed: {type(exc).__name__}")
         raise HTTPException(status_code=503, detail="Persistence layer is unavailable")
     return {"status": "ready"}
 
@@ -714,7 +714,7 @@ def stream_analysis(request: LogRequest, current_user: dict = Depends(get_curren
                 },
             })
         except Exception as exc:
-            print(f"[STREAM] Analysis failed: {exc}")
+            print(f"[STREAM] Analysis failed: {type(exc).__name__}")
             yield _sse_event({
                 "type": "error",
                 "stage": "error",

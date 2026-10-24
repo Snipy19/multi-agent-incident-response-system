@@ -44,7 +44,10 @@ def investigator_agent(state: dict) -> dict:
         ]
     )
 
-    print(f"[INVESTIGATOR - {angle}] Retrieved RAG context:\n{context_text}")
+    print(
+        f"[INVESTIGATOR - {angle}] Retrieved {len(similar_patterns)} "
+        "RAG context record(s)"
+    )
 
     prompt = f"""You are a DevOps specialist focused specifically on the "{angle}" aspect of a system.
 
@@ -76,7 +79,10 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     response = invoke_with_retry(llm, prompt)
     raw_output = response.content.strip()
 
-    print(f"[INVESTIGATOR - {angle}] LLM ka raw output: {raw_output}")
+    print(
+        f"[INVESTIGATOR - {angle}] Received LLM response "
+        f"({len(raw_output)} characters); validating structured output"
+    )
 
     # Guardrail validation prevents malformed, out-of-range, or unsupported
     # model output from entering the aggregator as if it were verified fact.
@@ -86,6 +92,9 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
         focus_log,
     )
 
-    print(f"[INVESTIGATOR - {angle}] Finding: {finding['finding']} (confidence: {finding['confidence']})")
+    print(
+        f"[INVESTIGATOR - {angle}] Finding validated "
+        f"(certainty: {finding['certainty']}, confidence: {finding['confidence']})"
+    )
 
     return {"investigation_findings": [finding]}

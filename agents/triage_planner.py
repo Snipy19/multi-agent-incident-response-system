@@ -67,7 +67,10 @@ Respond ONLY with valid JSON in this exact format:
     try:
         response = invoke_with_retry(llm, prompt)
         raw_output = response.content.strip()
-        print(f"[TRIAGE PLANNER AGENT] Raw LLM output: {raw_output}")
+        print(
+            "[TRIAGE PLANNER AGENT] Received LLM response "
+            f"({len(raw_output)} characters); validating structured output"
+        )
         parsed = parse_json_object(raw_output)
 
         is_anomaly = parsed["is_anomaly"]
@@ -85,7 +88,10 @@ Respond ONLY with valid JSON in this exact format:
         state["anomaly_reason"] = clean_model_text(reason).strip()
         state["investigation_angles"] = ensure_failure_domain_coverage(raw_log, angles)
     except (json.JSONDecodeError, KeyError, ValueError, AttributeError) as error:
-        print(f"[TRIAGE PLANNER AGENT] Structured response failed: {error}")
+        print(
+            "[TRIAGE PLANNER AGENT] Structured response validation failed: "
+            f"{type(error).__name__}"
+        )
         # A malformed triage response must not silently skip a possible
         # incident. Adaptive mode falls back to one bounded investigation.
         state["is_anomaly"] = True
