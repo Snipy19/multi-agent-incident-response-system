@@ -52,15 +52,26 @@ def get_graph_app():
     from graph import app as graph_app
     return graph_app
 
+
+def analysis_worker_enabled() -> bool:
+    """Keep the local single-container default while supporting split services."""
+    return os.getenv("ANALYSIS_WORKER_ENABLED", "true").strip().lower() not in {
+        "0", "false", "no", "off",
+    }
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
-    """Start and stop the durable queue worker with the API process."""
-    start_analysis_worker()
+    """Optionally run the durable worker alongside, or apart from, the API."""
+    worker_enabled = analysis_worker_enabled()
+    if worker_enabled:
+        start_analysis_worker()
     try:
         yield
     finally:
-        from services.analysis_worker import stop_analysis_worker
-        stop_analysis_worker()
+        if worker_enabled:
+            from services.analysis_worker import stop_analysis_worker
+            stop_analysis_worker()
 
 
 app = FastAPI(title="Autonomous Incident Response API", lifespan=lifespan)

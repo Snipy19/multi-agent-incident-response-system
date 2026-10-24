@@ -77,3 +77,13 @@ The current Compose file mounts `./db` for local SQLite persistence. During
 AWS deployment, remove that mount and set `DATABASE_URL` to the RDS
 PostgreSQL connection string instead. Leaving `DATABASE_URL` empty keeps the
 local SQLite path for development.
+
+For a split deployment, set `ANALYSIS_WORKER_ENABLED=false` on the API service
+and run the same image with:
+
+```text
+python -m services.worker_runner
+```
+
+The worker consumes the durable analysis queue from the shared database. The
+default remains enabled for the local one-container workflow.

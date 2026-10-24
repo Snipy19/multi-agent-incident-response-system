@@ -19,6 +19,7 @@ services:
       ENVIRONMENT: ${ENVIRONMENT:-development}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://127.0.0.1:8000,http://localhost:8000}
       PORT: ${PORT:-8000}
+      ANALYSIS_WORKER_ENABLED: ${ANALYSIS_WORKER_ENABLED:-true}
       TOKENIZERS_PARALLELISM: "false"
       OMP_NUM_THREADS: "1"
       MKL_NUM_THREADS: "1"

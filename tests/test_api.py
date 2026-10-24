@@ -50,6 +50,17 @@ def test_health_endpoint_is_public(api_client: TestClient):
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
+def test_analysis_worker_mode_is_configurable(monkeypatch):
+    """The split-service switch has a safe local default and explicit false values."""
+    from main import analysis_worker_enabled
+
+    monkeypatch.delenv("ANALYSIS_WORKER_ENABLED", raising=False)
+    assert analysis_worker_enabled() is True
+    for value in ("0", "false", "no", "off"):
+        monkeypatch.setenv("ANALYSIS_WORKER_ENABLED", value)
+        assert analysis_worker_enabled() is False
+
+
 def test_liveness_and_readiness_probes_are_real(api_client: TestClient):
     """Health probes distinguish a live process from a database-ready service."""
     assert api_client.get("/health/live").json() == {"status": "alive"}
