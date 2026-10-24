@@ -4,6 +4,10 @@ DATABASE LAYER
 SQLite persistence for password/Google users, incidents, and password-reset OTPs.
 """
 
+import hashlib
+import hmac
+import os
+import secrets
 import sqlite3
 import json
 from datetime import datetime, timezone
@@ -178,12 +182,30 @@ def create_google_user(user_id: str, username: str, email: str, google_id: str):
 
 # ---------- PASSWORD RESET OTP FUNCTIONS ----------
 
+_OTP_HASH_PREFIX = "hmac-sha256$"
+
+
+def _otp_digest(otp: str) -> str:
+    """Hash an OTP so a database read does not reveal the active code."""
+    secret = os.getenv("OTP_HASH_SECRET") or os.getenv("JWT_SECRET_KEY") or "local-otp-secret"
+    digest = hmac.new(secret.encode("utf-8"), otp.encode("utf-8"), hashlib.sha256)
+    return _OTP_HASH_PREFIX + digest.hexdigest()
+
 def save_otp(username: str, otp: str, expires_at: str):
     with get_connection() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO password_reset_otps (username, otp, expires_at, created_at) VALUES (?, ?, ?, ?)",
-            (username, otp, expires_at, datetime.now(timezone.utc).isoformat())
+            (username, _otp_digest(otp), expires_at, datetime.now(timezone.utc).isoformat())
         )
+
+
+def verify_otp(stored_otp: str, candidate_otp: str) -> bool:
+    """Verify new digests and temporary legacy plaintext rows during migration."""
+    if stored_otp.startswith(_OTP_HASH_PREFIX):
+        return secrets.compare_digest(stored_otp, _otp_digest(candidate_otp))
+    # Rows created by older versions are still usable once, without forcing
+    # every local database to be manually migrated before password recovery.
+    return secrets.compare_digest(stored_otp, candidate_otp)
 
 
 def get_otp(username: str):

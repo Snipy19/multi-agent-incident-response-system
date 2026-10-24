@@ -52,7 +52,10 @@ def test_user_and_password_reset_data_round_trip(isolated_database):
 
     expires_at = (datetime.now() + timedelta(minutes=10)).isoformat()
     isolated_database.save_otp("alice", "123456", expires_at)
-    assert isolated_database.get_otp("alice")["otp"] == "123456"
+    stored_otp = isolated_database.get_otp("alice")["otp"]
+    assert stored_otp != "123456"
+    assert isolated_database.verify_otp(stored_otp, "123456")
+    assert not isolated_database.verify_otp(stored_otp, "000000")
 
     isolated_database.delete_otp("alice")
     assert isolated_database.get_otp("alice") is None

@@ -27,7 +27,7 @@ from db.database import (
     init_db, save_incident, get_all_incidents, get_incident_by_id, delete_incident,
     create_user, get_user_by_username, get_user_by_email, update_user_password,
     get_user_by_google_id, create_google_user,
-    save_otp, get_otp, delete_otp, create_analysis_job, get_analysis_job,
+    save_otp, get_otp, delete_otp, verify_otp, create_analysis_job, get_analysis_job,
     consume_rate_limit
 )
 from db.database import get_connection
@@ -311,6 +311,12 @@ def forgot_password(request: ForgotPasswordRequest):
         raise HTTPException(status_code=404, detail="No account exists for this username.")
     if not user["email"]:
         raise HTTPException(status_code=400, detail="This account has no recovery email configured.")
+    if not consume_rate_limit(f"password-reset-request:{request.username}", 5, 3600):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many password reset requests. Please try again later.",
+            headers={"Retry-After": "3600"},
+        )
 
     otp = f"{secrets.randbelow(1_000_000):06d}"
     expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
@@ -327,6 +333,12 @@ def forgot_password(request: ForgotPasswordRequest):
 
 
 def _validate_otp(username: str, otp: str):
+    if not consume_rate_limit(f"password-reset-attempt:{username}", 10, 3600):
+        raise HTTPException(
+            status_code=429,
+            detail="Too many OTP attempts. Please request a new code later.",
+            headers={"Retry-After": "3600"},
+        )
     record = get_otp(username)
     if record is None:
         raise HTTPException(status_code=400, detail="No OTP request found. Please request a new one.")
@@ -337,7 +349,7 @@ def _validate_otp(username: str, otp: str):
     if datetime.now(timezone.utc) > expires_at:
         delete_otp(username)
         raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
-    if not secrets.compare_digest(record["otp"], otp):
+    if not verify_otp(record["otp"], otp):
         raise HTTPException(status_code=400, detail="Incorrect OTP.")
     return record
 

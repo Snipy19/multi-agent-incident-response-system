@@ -81,6 +81,19 @@ def test_forgot_password_rejects_unknown_username_before_otp_step(api_client):
     assert "No account exists" in response.json()["detail"]
 
 
+def test_password_reset_requests_are_rate_limited(api_client):
+    """Repeated reset-email requests cannot become an email abuse vector."""
+    create_account(api_client, "reset-limit", "reset-limit@example.com")
+
+    responses = [
+        api_client.post("/forgot-password", json={"username": "reset-limit"})
+        for _ in range(6)
+    ]
+    assert all(response.status_code == 503 for response in responses[:5])
+    assert responses[5].status_code == 429
+    assert responses[5].headers["retry-after"] == "3600"
+
+
 def test_reset_flow_verifies_otp_before_accepting_password(api_client):
     """OTP verification and password policy are enforced by real HTTP routes."""
     create_account(api_client, "resetuser", "resetuser@example.com")
