@@ -94,6 +94,8 @@
     .btn-secondary { background: #1f2937; color: #cbd5e1; }
     .btn-secondary:hover { background: #273449; }
     .btn-small { padding: 6px 14px; font-size: 12.5px; }
+    .btn-danger { background: #450a0a; color: #fca5a5; border: 1px solid #7f1d1d; }
+    .btn-danger:hover { background: #7f1d1d; color: #fee2e2; }
     .loading { color: #64748b; font-size: 13px; display: none; }
     .error-msg { color: #f87171; font-size: 13px; margin-top: 12px; display: none; }
     .progress-panel {
@@ -242,6 +244,7 @@
                     <button class="btn-secondary btn-small" onclick="downloadReport('pdf')">PDF</button>
                     <button class="btn-secondary btn-small" onclick="downloadReport('md')">Markdown</button>
                     <button class="btn-secondary btn-small" onclick="downloadReport('txt')">Text</button>
+                    <button class="btn-danger btn-small" id="deleteIncidentBtn" onclick="deleteActiveIncident()">Delete</button>
                 </div>
             </div>
             <div class="error-msg" id="downloadMsg"></div>
@@ -464,6 +467,7 @@
         document.getElementById("logInput").value = "";
         document.getElementById("errorMsg").style.display = "none";
         document.getElementById("downloadMsg").style.display = "none";
+        document.getElementById("deleteIncidentBtn").style.display = "none";
         loadIncidentList();
         window.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -614,6 +618,31 @@
         }
     }
 
+    async function deleteActiveIncident() {
+        const msg = document.getElementById("downloadMsg");
+        msg.style.display = "none";
+
+        if (!activeIncidentId) {
+            msg.textContent = "Open an incident first.";
+            msg.style.display = "block";
+            return;
+        }
+        if (!window.confirm("Delete this incident and its stored report? This cannot be undone.")) return;
+
+        try {
+            const res = await authFetch(`${API_BASE}/incidents/${encodeURIComponent(activeIncidentId)}`, {
+                method: "DELETE",
+                headers: authHeaders()
+            });
+            if (handleAuthError(res)) return;
+            if (!res.ok) throw new Error(`Server returned ${res.status}`);
+            resetToNew();
+        } catch (err) {
+            msg.textContent = "Could not delete incident: " + err.message;
+            msg.style.display = "block";
+        }
+    }
+
     function renderResult(data) {
         document.getElementById("anomalyReason").textContent = data.anomaly_reason;
         const angles = Array.isArray(data.investigation_angles) ? data.investigation_angles : [];
@@ -654,6 +683,7 @@
             ? renderReport(data.final_report)
             : '<p>No incident report was generated because no anomaly was detected.</p>';
         document.getElementById("downloadMsg").style.display = "none";
+        document.getElementById("deleteIncidentBtn").style.display = activeIncidentId ? "inline-block" : "none";
         document.getElementById("resultBox").style.display = "block";
     }
 

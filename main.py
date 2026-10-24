@@ -24,7 +24,7 @@ from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 
 from db.database import (
-    init_db, save_incident, get_all_incidents, get_incident_by_id,
+    init_db, save_incident, get_all_incidents, get_incident_by_id, delete_incident,
     create_user, get_user_by_username, get_user_by_email, update_user_password,
     get_user_by_google_id, create_google_user,
     save_otp, get_otp, delete_otp, create_analysis_job, get_analysis_job,
@@ -634,6 +634,15 @@ def get_incident(incident_id: str, current_user: dict = Depends(get_current_user
     if incident is None:
         raise HTTPException(status_code=404, detail="Incident not found")
     return incident
+
+
+@app.delete("/incidents/{incident_id}")
+def remove_incident(incident_id: str, current_user: dict = Depends(get_current_user)):
+    """Delete an owned incident; ownership is enforced in the SQL predicate."""
+    deleted = delete_incident(incident_id, current_user["user_id"])
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Incident not found")
+    return {"message": "Incident deleted"}
 
 
 @app.get("/incidents/{incident_id}/report")

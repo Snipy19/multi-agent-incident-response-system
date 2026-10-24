@@ -330,6 +330,77 @@ def test_incident_data_is_scoped_to_the_authenticated_user(api_client: TestClien
     assert bob_incidents.json() == []
 
 
+def test_user_can_delete_owned_incident(api_client: TestClient):
+    """Deletion removes the owned record from both detail and list endpoints."""
+    account = create_account(api_client, "delete-user", "delete@example.com")
+    user_id = database.get_user_by_username("delete-user")["id"]
+    database.save_incident(
+        "incident-delete",
+        user_id,
+        {
+            "raw_log": "worker timeout",
+            "is_anomaly": True,
+            "anomaly_reason": "Timeout",
+            "investigation_angles": ["application"],
+            "investigation_findings": [{"angle": "application", "finding": "timeout"}],
+            "root_cause": "Worker unavailable",
+            "root_cause_confidence": 0.7,
+            "suggested_fix": "Inspect worker health",
+            "fix_confidence": 0.6,
+            "needs_human_review": True,
+            "final_report": "Incident report",
+        },
+    )
+
+    deleted = api_client.delete(
+        "/incidents/incident-delete",
+        headers={"Authorization": f"Bearer {account['access_token']}"},
+    )
+    assert deleted.status_code == 200
+    assert deleted.json() == {"message": "Incident deleted"}
+    assert api_client.get(
+        "/incidents/incident-delete",
+        headers={"Authorization": f"Bearer {account['access_token']}"},
+    ).status_code == 404
+    assert api_client.get(
+        "/incidents", headers={"Authorization": f"Bearer {account['access_token']}"}
+    ).json() == []
+
+
+def test_user_cannot_delete_another_users_incident(api_client: TestClient):
+    """An ownership mismatch behaves as not-found and preserves the record."""
+    owner = create_account(api_client, "owner", "owner@example.com")
+    other = create_account(api_client, "other", "other@example.com")
+    owner_id = database.get_user_by_username("owner")["id"]
+    database.save_incident(
+        "incident-owned",
+        owner_id,
+        {
+            "raw_log": "service error",
+            "is_anomaly": True,
+            "anomaly_reason": "Error",
+            "investigation_angles": ["application"],
+            "investigation_findings": [{"angle": "application", "finding": "error"}],
+            "root_cause": "Unknown",
+            "root_cause_confidence": 0.2,
+            "suggested_fix": "Investigate",
+            "fix_confidence": 0.2,
+            "needs_human_review": True,
+            "final_report": "Incident report",
+        },
+    )
+
+    denied = api_client.delete(
+        "/incidents/incident-owned",
+        headers={"Authorization": f"Bearer {other['access_token']}"},
+    )
+    assert denied.status_code == 404
+    assert api_client.get(
+        "/incidents/incident-owned",
+        headers={"Authorization": f"Bearer {owner['access_token']}"},
+    ).status_code == 200
+
+
 def test_report_download_returns_professional_markdown(api_client: TestClient):
     """An owned incident can be exported through the real report endpoint."""
     account = create_account(api_client, "reporter", "reporter@example.com")

@@ -273,6 +273,16 @@ def get_incident_by_id(incident_id: str, user_id: str):
         return data
 
 
+def delete_incident(incident_id: str, user_id: str) -> bool:
+    """Delete one incident only when it belongs to the authenticated user."""
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM incidents WHERE id = ? AND user_id = ?",
+            (incident_id, user_id),
+        )
+        return cursor.rowcount == 1
+
+
 # ---------- ANALYSIS JOB QUEUE ----------
 
 def create_analysis_job(job_id: str, user_id: str, request_state: dict):
