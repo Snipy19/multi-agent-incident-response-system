@@ -48,6 +48,19 @@ def test_health_endpoint_is_public(api_client: TestClient):
     assert response.headers["x-content-type-options"] == "nosniff"
     assert response.headers["x-frame-options"] == "DENY"
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
+    assert response.headers["x-request-id"]
+
+
+def test_request_id_is_preserved_when_safe(api_client: TestClient):
+    response = api_client.get("/health/live", headers={"X-Request-ID": "manual-check-42"})
+    assert response.status_code == 200
+    assert response.headers["x-request-id"] == "manual-check-42"
+
+
+def test_invalid_request_id_is_replaced(api_client: TestClient):
+    response = api_client.get("/health/live", headers={"X-Request-ID": "bad value with spaces"})
+    assert response.status_code == 200
+    assert response.headers["x-request-id"] != "bad value with spaces"
 
 
 def test_analysis_worker_mode_is_configurable(monkeypatch):

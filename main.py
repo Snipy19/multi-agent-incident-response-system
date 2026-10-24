@@ -11,6 +11,8 @@ import uuid
 import secrets
 import json
 import re
+import logging
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Depends, HTTPException, Request
@@ -43,6 +45,9 @@ from utils.report_export import build_markdown, build_text, build_pdf
 from utils.evidence import compact_repeated_events
 from utils.guardrails import generated_report_input_reason, redact_sensitive_data
 from services.analysis_worker import start_analysis_worker
+
+
+logger = logging.getLogger("incident_response")
 
 
 def get_graph_app():
@@ -81,8 +86,31 @@ init_db()
 
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
-    """Apply safe browser defaults without requiring a frontend rewrite."""
-    response = await call_next(request)
+    """Apply browser defaults and correlate each request in service logs."""
+    request_id = request.headers.get("X-Request-ID", "").strip()
+    if not re.fullmatch(r"[A-Za-z0-9._-]{1,64}", request_id):
+        request_id = uuid.uuid4().hex
+    started_at = time.perf_counter()
+    try:
+        response = await call_next(request)
+    except Exception:
+        logger.exception(
+            "request_failed request_id=%s method=%s path=%s",
+            request_id,
+            request.method,
+            request.url.path,
+        )
+        raise
+    duration_ms = (time.perf_counter() - started_at) * 1000
+    logger.info(
+        "request_completed request_id=%s method=%s path=%s status=%s duration_ms=%.1f",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    response.headers["X-Request-ID"] = request_id
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
