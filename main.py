@@ -29,6 +29,7 @@ from db.database import (
     get_user_by_google_id, create_google_user,
     save_otp, get_otp, delete_otp, create_analysis_job, get_analysis_job
 )
+from db.database import get_connection
 from auth import (
     hash_password,
     verify_password,
@@ -365,6 +366,24 @@ def reset_password(request: ResetPasswordRequest):
 @app.get("/")
 def health_check():
     return {"status": "ok", "message": "Incident Response API is running"}
+
+
+@app.get("/health/live")
+def liveness_check():
+    """Process-level liveness probe; it does not depend on the database."""
+    return {"status": "alive"}
+
+
+@app.get("/health/ready")
+def readiness_check():
+    """Readiness probe that verifies the persistence layer is reachable."""
+    try:
+        with get_connection() as conn:
+            conn.execute("SELECT 1").fetchone()
+    except Exception as exc:
+        print(f"[HEALTH] Readiness check failed: {exc}")
+        raise HTTPException(status_code=503, detail="Persistence layer is unavailable")
+    return {"status": "ready"}
 
 
 # ---------- PROTECTED ENDPOINTS ----------

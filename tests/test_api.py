@@ -50,6 +50,14 @@ def test_health_endpoint_is_public(api_client: TestClient):
     assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
+def test_liveness_and_readiness_probes_are_real(api_client: TestClient):
+    """Health probes distinguish a live process from a database-ready service."""
+    assert api_client.get("/health/live").json() == {"status": "alive"}
+    ready = api_client.get("/health/ready")
+    assert ready.status_code == 200
+    assert ready.json() == {"status": "ready"}
+
+
 def test_forgot_password_rejects_unknown_username_before_otp_step(api_client):
     """Unknown accounts must not advance to a form for an undeliverable OTP."""
     response = api_client.post("/forgot-password", json={"username": "missing-user"})
