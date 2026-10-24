@@ -18,6 +18,7 @@ RUN pip install --no-cache-dir -r requirements-runtime.txt
 COPY auth.py graph.py main.py state.py pytest.ini ./
 COPY agents ./agents
 COPY db ./db
+COPY services ./services
 COPY frontend ./frontend
 COPY utils ./utils
 COPY vectorstore ./vectorstore

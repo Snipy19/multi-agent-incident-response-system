@@ -72,3 +72,21 @@ def test_duplicate_username_is_rejected_by_database(isolated_database):
 
     with pytest.raises(Exception):
         isolated_database.create_user("user-2", "alice", "other@example.com", "hash")
+
+
+def test_analysis_job_claim_and_completion_round_trip(isolated_database):
+    isolated_database.create_analysis_job(
+        "job-1",
+        "user-1",
+        {"raw_log": "ERROR timeout", "agent_mode": "adaptive"},
+    )
+
+    claimed = isolated_database.claim_next_analysis_job()
+    assert claimed["id"] == "job-1"
+    assert claimed["status"] == "running"
+    assert claimed["request_state"]["raw_log"] == "ERROR timeout"
+
+    isolated_database.complete_analysis_job("job-1", {"incident_id": "incident-1"})
+    stored = isolated_database.get_analysis_job("job-1", "user-1")
+    assert stored["status"] == "completed"
+    assert stored["result"] == {"incident_id": "incident-1"}

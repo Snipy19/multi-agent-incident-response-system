@@ -11,6 +11,7 @@ import uuid
 import secrets
 import json
 import re
+from contextlib import asynccontextmanager
 from datetime import datetime, timedelta
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,13 +27,14 @@ from db.database import (
     init_db, save_incident, get_all_incidents, get_incident_by_id,
     create_user, get_user_by_username, get_user_by_email, update_user_password,
     get_user_by_google_id, create_google_user,
-    save_otp, get_otp, delete_otp
+    save_otp, get_otp, delete_otp, create_analysis_job, get_analysis_job
 )
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 from utils.email_helper import send_otp_email
 from utils.report_export import build_markdown, build_text, build_pdf
 from utils.evidence import compact_repeated_events
 from utils.guardrails import generated_report_input_reason, redact_sensitive_data
+from services.analysis_worker import start_analysis_worker
 
 
 def get_graph_app():
@@ -42,7 +44,14 @@ def get_graph_app():
     from graph import app as graph_app
     return graph_app
 
-app = FastAPI(title="Autonomous Incident Response API")
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    """Start and stop the durable queue worker with the API process."""
+    start_analysis_worker()
+    yield
+
+
+app = FastAPI(title="Autonomous Incident Response API", lifespan=lifespan)
 
 init_db()
 
@@ -316,6 +325,37 @@ def analyze_incident(request: LogRequest, current_user: dict = Depends(get_curre
         "fix_missing_evidence": result.get("fix_missing_evidence", []),
         "needs_human_review": result["needs_human_review"],
         "final_report": result["final_report"]
+    }
+
+
+@app.post("/analyze/jobs", status_code=202)
+def submit_analysis_job(request: LogRequest, current_user: dict = Depends(get_current_user)):
+    """Queue an analysis and return immediately with a durable job id."""
+    initial_state = build_initial_state(request)
+    job_id = str(uuid.uuid4())
+    create_analysis_job(job_id, current_user["user_id"], initial_state)
+    start_analysis_worker()
+    return {
+        "job_id": job_id,
+        "status": "queued",
+        "message": "Analysis queued. Poll the job endpoint for completion.",
+    }
+
+
+@app.get("/analyze/jobs/{job_id}")
+def analysis_job_status(job_id: str, current_user: dict = Depends(get_current_user)):
+    """Return only the authenticated user's job state and final incident id."""
+    job = get_analysis_job(job_id, current_user["user_id"])
+    if job is None:
+        raise HTTPException(status_code=404, detail="Analysis job not found")
+    return {
+        "job_id": job["id"],
+        "status": job["status"],
+        "created_at": job["created_at"],
+        "started_at": job["started_at"],
+        "completed_at": job["completed_at"],
+        "result": job["result"],
+        "error": job["error"],
     }
 
 

@@ -176,6 +176,33 @@ def test_load_test_mode_requests_exact_agent_count(api_client: TestClient):
     assert too_many.status_code == 422
 
 
+def test_analysis_job_submission_is_durable_and_user_scoped(api_client, monkeypatch):
+    """Queued analysis returns immediately and cannot be read by another user."""
+    from main import app
+
+    monkeypatch.setattr("main.start_analysis_worker", lambda: None)
+    alice = create_account(api_client, "jobalice", "jobalice@example.com")
+    bob = create_account(api_client, "jobbob", "jobbob@example.com")
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    bob_headers = {"Authorization": f"Bearer {bob['access_token']}"}
+
+    queued = api_client.post(
+        "/analyze/jobs",
+        json={"raw_log": "CRITICAL checkout-api database timeout"},
+        headers=alice_headers,
+    )
+    assert queued.status_code == 202
+    job_id = queued.json()["job_id"]
+    assert queued.json()["status"] == "queued"
+
+    status = api_client.get(f"/analyze/jobs/{job_id}", headers=alice_headers)
+    assert status.status_code == 200
+    assert status.json()["status"] == "queued"
+
+    hidden = api_client.get(f"/analyze/jobs/{job_id}", headers=bob_headers)
+    assert hidden.status_code == 404
+
+
 def test_incident_data_is_scoped_to_the_authenticated_user(api_client: TestClient):
     """A user's incident list must not expose another user's records."""
     alice = create_account(api_client, "alice", "alice@example.com")

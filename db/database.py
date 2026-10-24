@@ -74,7 +74,20 @@ def init_db():
                 created_at TEXT NOT NULL
             )
         """)
-    print("[DATABASE] Tables are ready: users, incidents, password_reset_otps")
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS analysis_jobs (
+                id TEXT PRIMARY KEY,
+                user_id TEXT NOT NULL,
+                request_state TEXT NOT NULL,
+                status TEXT NOT NULL,
+                result TEXT,
+                error TEXT,
+                created_at TEXT NOT NULL,
+                started_at TEXT,
+                completed_at TEXT
+            )
+        """)
+    print("[DATABASE] Tables are ready: users, incidents, password_reset_otps, analysis_jobs")
 
 
 # ---------- USER FUNCTIONS (password-based) ----------
@@ -209,3 +222,72 @@ def get_incident_by_id(incident_id: str, user_id: str):
         data["investigation_angles"] = json.loads(data["investigation_angles"])
         data["investigation_findings"] = json.loads(data["investigation_findings"])
         return data
+
+
+# ---------- ANALYSIS JOB QUEUE ----------
+
+def create_analysis_job(job_id: str, user_id: str, request_state: dict):
+    """Persist a queued analysis before a worker is allowed to execute it."""
+    with get_connection() as conn:
+        conn.execute(
+            """INSERT INTO analysis_jobs
+               (id, user_id, request_state, status, created_at)
+               VALUES (?, ?, ?, 'queued', ?)""",
+            (job_id, user_id, json.dumps(request_state), datetime.now(timezone.utc).isoformat()),
+        )
+
+
+def get_analysis_job(job_id: str, user_id: str):
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT * FROM analysis_jobs WHERE id = ? AND user_id = ?",
+            (job_id, user_id),
+        ).fetchone()
+    if row is None:
+        return None
+    data = dict(row)
+    data["request_state"] = json.loads(data["request_state"])
+    data["result"] = json.loads(data["result"]) if data["result"] else None
+    return data
+
+
+def claim_next_analysis_job():
+    """Claim one queued job; one local worker owns a job at a time."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT id FROM analysis_jobs WHERE status = 'queued' ORDER BY created_at LIMIT 1"
+        ).fetchone()
+        if row is None:
+            return None
+        now = datetime.now(timezone.utc).isoformat()
+        changed = conn.execute(
+            """UPDATE analysis_jobs SET status = 'running', started_at = ?
+               WHERE id = ? AND status = 'queued'""",
+            (now, row["id"]),
+        ).rowcount
+        if changed != 1:
+            return None
+        claimed = conn.execute(
+            "SELECT * FROM analysis_jobs WHERE id = ?", (row["id"],)
+        ).fetchone()
+    data = dict(claimed)
+    data["request_state"] = json.loads(data["request_state"])
+    return data
+
+
+def complete_analysis_job(job_id: str, result: dict):
+    with get_connection() as conn:
+        conn.execute(
+            """UPDATE analysis_jobs SET status = 'completed', result = ?, completed_at = ?
+               WHERE id = ?""",
+            (json.dumps(result), datetime.now(timezone.utc).isoformat(), job_id),
+        )
+
+
+def fail_analysis_job(job_id: str, error: str):
+    with get_connection() as conn:
+        conn.execute(
+            """UPDATE analysis_jobs SET status = 'failed', error = ?, completed_at = ?
+               WHERE id = ?""",
+            (error[:2000], datetime.now(timezone.utc).isoformat(), job_id),
+        )
