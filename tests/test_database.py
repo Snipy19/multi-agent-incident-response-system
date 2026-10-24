@@ -25,10 +25,17 @@ def incident_result():
         ],
         "root_cause": "The upstream service was unavailable.",
         "root_cause_confidence": 0.8,
+        "root_cause_certainty": "Strong hypothesis",
         "root_cause_confidence_reason": "The timeout is directly observed, but reachability is unverified.",
+        "root_cause_evidence": ["The request timed out."],
+        "root_cause_missing_evidence": ["A reachability check."],
+        "root_cause_alternatives": ["Application saturation."],
         "suggested_fix": "Check upstream service health.",
         "fix_confidence": 0.75,
+        "fix_certainty": "Strong hypothesis",
         "fix_confidence_reason": "The fix validates the dependency before changing production.",
+        "fix_evidence": ["The dependency timed out."],
+        "fix_missing_evidence": ["Current dependency metrics."],
         "needs_human_review": False,
         "final_report": "Incident report",
     }
@@ -60,6 +67,9 @@ def test_incident_round_trip_is_private_to_user(isolated_database):
     assert stored["investigation_angles"] == ["API", "Network"]
     assert stored["investigation_findings"][0]["confidence"] == 0.9
     assert stored["root_cause"] == "The upstream service was unavailable."
+    assert stored["root_cause_certainty"] == "Strong hypothesis"
+    assert stored["root_cause_evidence"] == ["The request timed out."]
+    assert stored["fix_missing_evidence"] == ["Current dependency metrics."]
     assert "directly observed" in stored["root_cause_confidence_reason"]
     assert "validates the dependency" in stored["fix_confidence_reason"]
 

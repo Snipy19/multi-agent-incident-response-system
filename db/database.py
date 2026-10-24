@@ -50,10 +50,17 @@ def init_db():
                 investigation_findings TEXT,
                 root_cause TEXT,
                 root_cause_confidence REAL,
+                root_cause_certainty TEXT,
                 root_cause_confidence_reason TEXT,
+                root_cause_evidence TEXT,
+                root_cause_missing_evidence TEXT,
+                root_cause_alternatives TEXT,
                 suggested_fix TEXT,
                 fix_confidence REAL,
+                fix_certainty TEXT,
                 fix_confidence_reason TEXT,
+                fix_evidence TEXT,
+                fix_missing_evidence TEXT,
                 needs_human_review INTEGER,
                 final_report TEXT
             )
@@ -63,9 +70,20 @@ def init_db():
         columns = {
             row[1] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()
         }
-        for column in ("root_cause_confidence_reason", "fix_confidence_reason"):
+        columns_to_add = {
+            "root_cause_certainty": "TEXT",
+            "root_cause_confidence_reason": "TEXT",
+            "root_cause_evidence": "TEXT",
+            "root_cause_missing_evidence": "TEXT",
+            "root_cause_alternatives": "TEXT",
+            "fix_certainty": "TEXT",
+            "fix_confidence_reason": "TEXT",
+            "fix_evidence": "TEXT",
+            "fix_missing_evidence": "TEXT",
+        }
+        for column, column_type in columns_to_add.items():
             if column not in columns:
-                conn.execute(f"ALTER TABLE incidents ADD COLUMN {column} TEXT")
+                conn.execute(f"ALTER TABLE incidents ADD COLUMN {column} {column_type}")
         conn.execute("""
             CREATE TABLE IF NOT EXISTS password_reset_otps (
                 username TEXT PRIMARY KEY,
@@ -175,11 +193,13 @@ def save_incident(incident_id: str, user_id: str, result: dict):
             INSERT INTO incidents (
                 id, user_id, created_at, raw_log, is_anomaly, anomaly_reason,
                 investigation_angles, investigation_findings,
-                root_cause, root_cause_confidence,
-                root_cause_confidence_reason, suggested_fix, fix_confidence,
-                fix_confidence_reason,
+                root_cause, root_cause_confidence, root_cause_certainty,
+                root_cause_confidence_reason, root_cause_evidence,
+                root_cause_missing_evidence, root_cause_alternatives,
+                suggested_fix, fix_confidence, fix_certainty,
+                fix_confidence_reason, fix_evidence, fix_missing_evidence,
                 needs_human_review, final_report
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             incident_id,
             user_id,
@@ -191,10 +211,17 @@ def save_incident(incident_id: str, user_id: str, result: dict):
             json.dumps(result["investigation_findings"]),
             result["root_cause"],
             result["root_cause_confidence"],
+            result.get("root_cause_certainty"),
             result.get("root_cause_confidence_reason"),
+            json.dumps(result.get("root_cause_evidence") or []),
+            json.dumps(result.get("root_cause_missing_evidence") or []),
+            json.dumps(result.get("root_cause_alternatives") or []),
             result["suggested_fix"],
             result["fix_confidence"],
+            result.get("fix_certainty"),
             result.get("fix_confidence_reason"),
+            json.dumps(result.get("fix_evidence") or []),
+            json.dumps(result.get("fix_missing_evidence") or []),
             int(result["needs_human_review"]) if result["needs_human_review"] is not None else None,
             result["final_report"]
         ))
@@ -204,7 +231,8 @@ def save_incident(incident_id: str, user_id: str, result: dict):
 def get_all_incidents(user_id: str, limit: int = 50):
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT id, created_at, raw_log, root_cause, root_cause_confidence, needs_human_review "
+            "SELECT id, created_at, raw_log, root_cause, root_cause_confidence, "
+            "root_cause_certainty, needs_human_review "
             "FROM incidents WHERE user_id = ? ORDER BY created_at DESC LIMIT ?",
             (user_id, limit)
         ).fetchall()
@@ -219,8 +247,13 @@ def get_incident_by_id(incident_id: str, user_id: str):
         if row is None:
             return None
         data = dict(row)
-        data["investigation_angles"] = json.loads(data["investigation_angles"])
-        data["investigation_findings"] = json.loads(data["investigation_findings"])
+        data["investigation_angles"] = json.loads(data["investigation_angles"] or "[]")
+        data["investigation_findings"] = json.loads(data["investigation_findings"] or "[]")
+        for field in (
+            "root_cause_evidence", "root_cause_missing_evidence",
+            "root_cause_alternatives", "fix_evidence", "fix_missing_evidence",
+        ):
+            data[field] = json.loads(data[field] or "[]")
         return data
 
 
