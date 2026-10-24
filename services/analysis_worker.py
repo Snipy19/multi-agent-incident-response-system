@@ -14,6 +14,7 @@ from db.database import (
     claim_next_analysis_job,
     complete_analysis_job,
     fail_analysis_job,
+    heartbeat_analysis_job,
     requeue_stale_analysis_jobs,
     save_incident,
 )
@@ -67,6 +68,7 @@ class AnalysisWorker:
 
             current_state = dict(job["request_state"])
             current_state["investigation_findings"] = []
+            heartbeat_analysis_job(job["id"])
             for update in graph_app.stream(job["request_state"], stream_mode="updates"):
                 for node, node_update in update.items():
                     if not isinstance(node_update, dict):
@@ -100,6 +102,7 @@ class AnalysisWorker:
                             "stage": node,
                             "message": labels.get(node, f"{node} completed."),
                         }
+                    heartbeat_analysis_job(job["id"])
                     append_analysis_job_event(job["id"], event)
 
             result = current_state

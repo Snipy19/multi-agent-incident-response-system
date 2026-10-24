@@ -103,6 +103,7 @@ def init_db():
                 error TEXT,
                 created_at TEXT NOT NULL,
                 started_at TEXT,
+                heartbeat_at TEXT,
                 completed_at TEXT
             )
         """)
@@ -111,6 +112,8 @@ def init_db():
         }
         if "events" not in job_columns:
             conn.execute("ALTER TABLE analysis_jobs ADD COLUMN events TEXT NOT NULL DEFAULT '[]'")
+        if "heartbeat_at" not in job_columns:
+            conn.execute("ALTER TABLE analysis_jobs ADD COLUMN heartbeat_at TEXT")
     print("[DATABASE] Tables are ready: users, incidents, password_reset_otps, analysis_jobs")
 
 
@@ -307,9 +310,9 @@ def claim_next_analysis_job():
             return None
         now = datetime.now(timezone.utc).isoformat()
         changed = conn.execute(
-            """UPDATE analysis_jobs SET status = 'running', started_at = ?
+            """UPDATE analysis_jobs SET status = 'running', started_at = ?, heartbeat_at = ?
                WHERE id = ? AND status = 'queued'""",
-            (now, row["id"]),
+            (now, now, row["id"]),
         ).rowcount
         if changed != 1:
             return None
@@ -327,23 +330,33 @@ def requeue_stale_analysis_jobs(max_age_minutes: int = 30):
     cutoff = datetime.now(timezone.utc).timestamp() - (max_age_minutes * 60)
     with get_connection() as conn:
         rows = conn.execute(
-            "SELECT id, started_at FROM analysis_jobs WHERE status = 'running'"
+            "SELECT id, started_at, heartbeat_at FROM analysis_jobs WHERE status = 'running'"
         ).fetchall()
         for row in rows:
-            started_at = row["started_at"]
-            if not started_at:
+            last_seen = row["heartbeat_at"] or row["started_at"]
+            if not last_seen:
                 continue
-            parsed = datetime.fromisoformat(started_at)
+            parsed = datetime.fromisoformat(last_seen)
             if parsed.tzinfo is None:
                 parsed = parsed.replace(tzinfo=timezone.utc)
             if parsed.timestamp() < cutoff:
                 conn.execute(
                     """UPDATE analysis_jobs
-                       SET status = 'queued', started_at = NULL,
+                       SET status = 'queued', started_at = NULL, heartbeat_at = NULL,
                            error = 'Worker restarted before the analysis completed.'
                        WHERE id = ? AND status = 'running'""",
                     (row["id"],),
                 )
+
+
+def heartbeat_analysis_job(job_id: str):
+    """Renew a running job lease so active work is not requeued as stale."""
+    with get_connection() as conn:
+        conn.execute(
+            """UPDATE analysis_jobs SET heartbeat_at = ?
+               WHERE id = ? AND status = 'running'""",
+            (datetime.now(timezone.utc).isoformat(), job_id),
+        )
 
 
 def append_analysis_job_event(job_id: str, event: dict):
@@ -364,7 +377,8 @@ def append_analysis_job_event(job_id: str, event: dict):
 def complete_analysis_job(job_id: str, result: dict):
     with get_connection() as conn:
         conn.execute(
-            """UPDATE analysis_jobs SET status = 'completed', result = ?, completed_at = ?
+            """UPDATE analysis_jobs
+               SET status = 'completed', result = ?, completed_at = ?, heartbeat_at = NULL
                WHERE id = ?""",
             (json.dumps(result), datetime.now(timezone.utc).isoformat(), job_id),
         )
@@ -373,7 +387,7 @@ def complete_analysis_job(job_id: str, result: dict):
 def fail_analysis_job(job_id: str, error: str):
     with get_connection() as conn:
         conn.execute(
-            """UPDATE analysis_jobs SET status = 'failed', error = ?, completed_at = ?
+            """UPDATE analysis_jobs SET status = 'failed', error = ?, completed_at = ?, heartbeat_at = NULL
                WHERE id = ?""",
             (error[:2000], datetime.now(timezone.utc).isoformat(), job_id),
         )

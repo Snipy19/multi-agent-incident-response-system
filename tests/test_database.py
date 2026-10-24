@@ -94,6 +94,7 @@ def test_analysis_job_claim_and_completion_round_trip(isolated_database):
     claimed = isolated_database.claim_next_analysis_job()
     assert claimed["id"] == "job-1"
     assert claimed["status"] == "running"
+    assert claimed["heartbeat_at"] is not None
     assert claimed["request_state"]["raw_log"] == "ERROR timeout"
     assert claimed["events"][0]["type"] == "queued"
 
@@ -101,6 +102,7 @@ def test_analysis_job_claim_and_completion_round_trip(isolated_database):
     stored = isolated_database.get_analysis_job("job-1", "user-1")
     assert stored["status"] == "completed"
     assert stored["result"] == {"incident_id": "incident-1"}
+    assert stored["heartbeat_at"] is None
 
 
 def test_stale_running_analysis_job_is_requeued(isolated_database):
@@ -114,9 +116,33 @@ def test_stale_running_analysis_job_is_requeued(isolated_database):
 
     with isolated_database.get_connection() as conn:
         conn.execute(
-            "UPDATE analysis_jobs SET started_at = ? WHERE id = ?",
-            ((datetime.now(timezone.utc) - timedelta(minutes=31)).isoformat(), "job-stale"),
+            "UPDATE analysis_jobs SET started_at = ?, heartbeat_at = ? WHERE id = ?",
+            (
+                (datetime.now(timezone.utc) - timedelta(minutes=31)).isoformat(),
+                (datetime.now(timezone.utc) - timedelta(minutes=31)).isoformat(),
+                "job-stale",
+            ),
         )
 
     isolated_database.requeue_stale_analysis_jobs()
     assert isolated_database.get_analysis_job("job-stale", "user-1")["status"] == "queued"
+
+
+def test_recent_job_heartbeat_prevents_stale_requeue(isolated_database):
+    isolated_database.create_analysis_job(
+        "job-active",
+        "user-1",
+        {"raw_log": "ERROR timeout", "agent_mode": "adaptive"},
+    )
+    isolated_database.claim_next_analysis_job()
+
+    with isolated_database.get_connection() as conn:
+        old = (datetime.now(timezone.utc) - timedelta(minutes=31)).isoformat()
+        recent = datetime.now(timezone.utc).isoformat()
+        conn.execute(
+            "UPDATE analysis_jobs SET started_at = ?, heartbeat_at = ? WHERE id = ?",
+            (old, recent, "job-active"),
+        )
+
+    isolated_database.requeue_stale_analysis_jobs()
+    assert isolated_database.get_analysis_job("job-active", "user-1")["status"] == "running"
