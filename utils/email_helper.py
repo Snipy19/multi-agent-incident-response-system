@@ -43,4 +43,4 @@ Incident Response Console
         server.login(EMAIL_ADDRESS, EMAIL_APP_PASSWORD)
         server.send_message(msg)
 
-    print(f"[EMAIL] OTP sent to {to_email}")
+        print("[EMAIL] OTP sent successfully")
