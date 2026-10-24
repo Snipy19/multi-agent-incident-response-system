@@ -46,6 +46,27 @@ http://127.0.0.1:8000/health/ready
 The container healthcheck uses `/health/ready`; `/health/live` is a
 process-only liveness probe.
 
+## Publishing a release image
+
+The release workflow publishes a versioned image to GitHub Container Registry
+only when a version tag is pushed. Ordinary commits do not publish or deploy
+anything.
+
+```powershell
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The image is published as:
+
+```text
+ghcr.io/snipy19/multi-agent-incident-response-system:v0.1.0
+```
+
+AWS deployment is intentionally not claimed here. ECS/EKS service details,
+region, networking, database, and secrets must be configured before a deploy
+workflow can safely roll out this image.
+
 ## Stop the service
 
 ```powershell
