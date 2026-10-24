@@ -372,6 +372,11 @@
         return `${(score * 100).toFixed(0)}% · ${label}`;
     }
 
+    const _rawConfidenceDisplay = confidenceDisplay;
+    confidenceDisplay = function(score, label = "Evidence estimate") {
+        return _rawConfidenceDisplay(score, label).replace(/\u00c2\u00b7/g, " - ");
+    };
+
     function formatDateTime(isoString) {
         const d = new Date(isoString);
         const dateStr = d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' });
@@ -626,12 +631,14 @@
         const rootBadge = document.getElementById("rootConfidence");
         rootBadge.textContent = `${data.root_cause_certainty || "Inconclusive"} · ${confidenceDisplay(data.root_cause_confidence)}`;
         rootBadge.className = "confidence-tag " + confidenceClass(data.root_cause_confidence);
+        rootBadge.textContent = rootBadge.textContent.replace(/\u00c2\u00b7/g, " - ");
 
         document.getElementById("suggestedFix").textContent = data.suggested_fix;
         document.getElementById("fixConfidenceReason").textContent = "Confidence basis: " + (data.fix_confidence_reason || "Not provided");
         const fixBadge = document.getElementById("fixConfidence");
         fixBadge.textContent = `${data.fix_certainty || "Inconclusive"} · ${confidenceDisplay(data.fix_confidence)}`;
         fixBadge.className = "confidence-tag " + confidenceClass(data.fix_confidence);
+        fixBadge.textContent = fixBadge.textContent.replace(/\u00c2\u00b7/g, " - ");
 
         document.getElementById("reviewFlag").style.display = data.needs_human_review ? "inline-flex" : "none";
         document.getElementById("fullReport").innerHTML = data.final_report
