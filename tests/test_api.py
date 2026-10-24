@@ -262,6 +262,21 @@ def test_signup_and_login_use_real_authentication(api_client: TestClient):
     assert body["access_token"]
 
 
+def test_login_attempts_are_rate_limited(api_client: TestClient):
+    """Repeated credential guesses receive a bounded generic response."""
+    create_account(api_client, "login-limit", "login-limit@example.com")
+    responses = [
+        api_client.post(
+            "/login",
+            json={"username": "login-limit", "password": "WrongPass123!"},
+        )
+        for _ in range(11)
+    ]
+    assert all(response.status_code == 401 for response in responses[:10])
+    assert responses[10].status_code == 429
+    assert responses[10].headers["retry-after"] == "900"
+
+
 def test_browser_auth_uses_httponly_cookie_and_logout_clears_it(api_client: TestClient):
     """The browser session works without exposing the JWT to JavaScript."""
     response = api_client.post(

@@ -265,6 +265,26 @@ def password_policy_error(password: str) -> str | None:
     return None
 
 
+def _request_client_key(request: Request) -> str:
+    """Use the directly connected peer without trusting spoofable headers."""
+    return request.client.host if request.client else "unknown"
+
+
+def enforce_login_rate_limit(username: str, request: Request) -> None:
+    """Limit both account-targeted and single-client credential guessing."""
+    per_user = int(os.getenv("LOGIN_RATE_LIMIT_PER_15_MIN", "10"))
+    per_client = int(os.getenv("LOGIN_IP_RATE_LIMIT_PER_15_MIN", "60"))
+    client_key = _request_client_key(request)
+    allowed_user = consume_rate_limit(f"login-user:{username}", per_user, 900)
+    allowed_client = consume_rate_limit(f"login-ip:{client_key}", per_client, 900)
+    if not allowed_user or not allowed_client:
+        raise HTTPException(
+            status_code=429,
+            detail="Too many login attempts. Please try again later.",
+            headers={"Retry-After": "900"},
+        )
+
+
 # ---------- AUTH ENDPOINTS (username/password) ----------
 
 @app.post("/signup")
@@ -287,7 +307,8 @@ def signup(request: SignupRequest, response: Response):
 
 
 @app.post("/login")
-def login(request: LoginRequest, response: Response):
+def login(request: LoginRequest, response: Response, http_request: Request):
+    enforce_login_rate_limit(request.username, http_request)
     user = get_user_by_username(request.username)
     if not user or not user["password_hash"] or not verify_password(request.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
@@ -306,7 +327,8 @@ def google_config():
     return {"enabled": bool(client_id), "client_id": client_id or None}
 
 @app.post("/auth/google")
-def google_login(request: GoogleLoginRequest, response: Response):
+def google_login(request: GoogleLoginRequest, response: Response, http_request: Request):
+    enforce_login_rate_limit("google", http_request)
     client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
     if not client_id:
         print("[AUTH] Google sign-in rejected: GOOGLE_CLIENT_ID is not configured")
