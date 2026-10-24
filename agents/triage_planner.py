@@ -20,7 +20,7 @@ from utils.agent_planning import (
     requested_load_test_targets,
 )
 from utils.guardrails import clean_model_text, parse_json_object
-from utils.llm_helper import LLM_TIMEOUT_SECONDS, invoke_with_retry
+from utils.llm_helper import invoke_with_retry
 
 load_dotenv()
 
@@ -29,8 +29,6 @@ llm = ChatGroq(
     temperature=0,
     max_tokens=4096,
     reasoning_effort="low",
-    timeout=LLM_TIMEOUT_SECONDS,
-    max_retries=0,
     api_key=os.getenv("GROQ_API_KEY"),
 )
 
