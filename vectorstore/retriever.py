@@ -9,7 +9,7 @@ angle, regardless of whether one or many investigators are spawned.
 """
 
 import faiss
-import pickle
+import json
 import numpy as np
 from functools import lru_cache
 from threading import Lock
@@ -20,7 +20,7 @@ from sentence_transformers import SentenceTransformer
 # duplicate model/index loads when parallel investigators start together.
 _model = None
 _index = None
-_metadata = None
+_metadata: list[dict] | None = None
 _resource_lock = Lock()
 
 
@@ -35,8 +35,8 @@ def _ensure_resources() -> None:
         print("[RETRIEVER] Loading the index and embedding model...")
         _model = SentenceTransformer("all-MiniLM-L6-v2")
         _index = faiss.read_index("vectorstore/hdfs_index.faiss")
-        with open("vectorstore/hdfs_metadata.pkl", "rb") as f:
-            _metadata = pickle.load(f)
+        with open("vectorstore/hdfs_metadata.json", "r", encoding="utf-8") as f:
+            _metadata = json.load(f)
         print(f"[RETRIEVER] Ready - {_index.ntotal} patterns loaded")
 
 
@@ -51,7 +51,9 @@ def _retrieve_uncached(query_log: str, top_k: int) -> tuple[dict, ...]:
     # FAISS returns row positions; metadata must remain aligned with the index.
     results = []
     for dist, idx in zip(distances[0], indices[0]):
-        row = _metadata.iloc[idx]
+        if idx < 0 or idx >= len(_metadata):
+            continue
+        row = _metadata[int(idx)]
         results.append({
             "template": row["EventTemplate"],
             "sample_content": row.get("SampleContent", row["EventTemplate"]),

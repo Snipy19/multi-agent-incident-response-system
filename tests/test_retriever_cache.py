@@ -1,4 +1,16 @@
+import json
+from pathlib import Path
+
 from vectorstore import retriever
+
+
+def test_runtime_metadata_is_data_only_json():
+    metadata_path = Path("vectorstore/hdfs_metadata.json")
+    records = json.loads(metadata_path.read_text(encoding="utf-8"))
+
+    assert records
+    assert all("EventTemplate" in record for record in records)
+    assert not Path("vectorstore/hdfs_metadata.pkl").exists()
 
 
 def test_retriever_reuses_normalized_query_and_returns_independent_results(monkeypatch):
@@ -27,3 +39,35 @@ def test_retriever_rejects_invalid_top_k():
             pass
         else:
             raise AssertionError("invalid top_k should raise ValueError")
+
+
+def test_retriever_maps_json_records_to_faiss_results(monkeypatch):
+    class FakeModel:
+        def encode(self, values):
+            return [[0.0, 1.0] for _ in values]
+
+    class FakeIndex:
+        def search(self, _query, _top_k):
+            return [[0.25]], [[0]]
+
+    monkeypatch.setattr(retriever, "_ensure_resources", lambda: None)
+    monkeypatch.setattr(retriever, "_model", FakeModel())
+    monkeypatch.setattr(retriever, "_index", FakeIndex())
+    monkeypatch.setattr(
+        retriever,
+        "_metadata",
+        [{
+            "EventTemplate": "database timeout",
+            "SampleContent": "connection timed out",
+            "ExampleCount": 4,
+            "Label": "E1",
+            "Level": "ERROR",
+            "Component": "database",
+            "Dataset": "synthetic-test-fixture",
+        }],
+    )
+
+    result = retriever._retrieve_uncached("database timeout", 1)
+    assert result[0]["template"] == "database timeout"
+    assert result[0]["example_count"] == 4
+    assert result[0]["distance"] == 0.25

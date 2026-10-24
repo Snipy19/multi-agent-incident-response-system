@@ -16,7 +16,7 @@ import os
 import pandas as pd
 import faiss
 import numpy as np
-import pickle
+import json
 from sentence_transformers import SentenceTransformer
 
 print("[BUILD INDEX] Discovering *_2k.log_structured.csv files in data/...")
@@ -114,10 +114,10 @@ dimension = embeddings.shape[1]
 index = faiss.IndexFlatL2(dimension)
 index.add(np.array(embeddings).astype("float32"))
 
-# Persist both the vector index and aligned metadata for retrieval.
+# Persist both the vector index and aligned metadata for retrieval. JSON keeps
+# the runtime artifact data-only and avoids loading executable pickle content.
 faiss.write_index(index, "vectorstore/hdfs_index.faiss")
-
-with open("vectorstore/hdfs_metadata.pkl", "wb") as f:
-    pickle.dump(combined, f)
+with open("vectorstore/hdfs_metadata.json", "w", encoding="utf-8") as f:
+    json.dump(combined.to_dict(orient="records"), f, ensure_ascii=False, indent=2)
 
 print(f"[BUILD INDEX] Done! Saved {len(combined)} patterns from {len(csv_files)} datasets.")
