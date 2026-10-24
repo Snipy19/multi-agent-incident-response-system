@@ -12,7 +12,7 @@ import secrets
 import json
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from fastapi import FastAPI, Depends, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
@@ -213,14 +213,29 @@ def google_login(request: GoogleLoginRequest):
 
     google_id = idinfo["sub"]
     email = idinfo.get("email", "")
-    name = idinfo.get("name", email.split("@")[0] if email else "GoogleUser")
+    if not email or not idinfo.get("email_verified", False):
+        raise HTTPException(status_code=403, detail="A verified Google email is required")
+    name = idinfo.get("name", email.split("@")[0])
 
     user = get_user_by_google_id(google_id)
 
     if user is None:
+        existing_email_user = get_user_by_email(email)
+        if existing_email_user:
+            raise HTTPException(
+                status_code=409,
+                detail="An account already exists for this email. Sign in with that account first.",
+            )
+
+        # Display names are not unique and may contain spaces. Use the email
+        # local-part as a stable username base, then add a short Google-sub
+        # suffix only when another account already uses that name.
+        username_base = re.sub(r"[^a-z0-9_]", "", email.split("@", 1)[0].lower())[:24] or "googleuser"
+        username = username_base
+        if get_user_by_username(username):
+            username = f"{username_base[:17]}-{google_id[-6:]}"
         user_id = str(uuid.uuid4())
-        create_google_user(user_id, name, email, google_id)
-        username = name
+        create_google_user(user_id, username, email, google_id)
     else:
         user_id = user["id"]
         username = user["username"]
@@ -242,7 +257,7 @@ def forgot_password(request: ForgotPasswordRequest):
         raise HTTPException(status_code=400, detail="This account has no recovery email configured.")
 
     otp = f"{secrets.randbelow(1_000_000):06d}"
-    expires_at = (datetime.now() + timedelta(minutes=10)).isoformat()
+    expires_at = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat()
     save_otp(request.username, otp, expires_at)
 
     try:
@@ -259,7 +274,11 @@ def _validate_otp(username: str, otp: str):
     record = get_otp(username)
     if record is None:
         raise HTTPException(status_code=400, detail="No OTP request found. Please request a new one.")
-    if datetime.now() > datetime.fromisoformat(record["expires_at"]):
+    expires_at = datetime.fromisoformat(record["expires_at"])
+    if expires_at.tzinfo is None:
+        # Preserve compatibility with OTP rows created before UTC timestamps.
+        expires_at = expires_at.replace(tzinfo=timezone.utc)
+    if datetime.now(timezone.utc) > expires_at:
         delete_otp(username)
         raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
     if not secrets.compare_digest(record["otp"], otp):

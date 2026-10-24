@@ -120,7 +120,7 @@ def create_user(user_id: str, username: str, email: str, password_hash: str):
     with get_connection() as conn:
         conn.execute(
             "INSERT INTO users (id, username, email, password_hash, created_at) VALUES (?, ?, ?, ?, ?)",
-            (user_id, username, email, password_hash, datetime.now().isoformat())
+            (user_id, username, email, password_hash, datetime.now(timezone.utc).isoformat())
         )
 
 
@@ -172,7 +172,7 @@ def save_otp(username: str, otp: str, expires_at: str):
     with get_connection() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO password_reset_otps (username, otp, expires_at, created_at) VALUES (?, ?, ?, ?)",
-            (username, otp, expires_at, datetime.now().isoformat())
+            (username, otp, expires_at, datetime.now(timezone.utc).isoformat())
         )
 
 

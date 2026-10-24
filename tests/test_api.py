@@ -113,6 +113,39 @@ def test_google_config_uses_backend_environment(api_client, monkeypatch):
     }
 
 
+def test_google_login_requires_verified_email_and_generates_unique_username(api_client, monkeypatch):
+    """Google display names must not collide or bypass email verification."""
+    monkeypatch.setenv("GOOGLE_CLIENT_ID", "real-client-id.apps.googleusercontent.com")
+    from google.oauth2 import id_token as google_id_token
+
+    monkeypatch.setattr(
+        google_id_token,
+        "verify_oauth2_token",
+        lambda *args, **kwargs: {
+            "sub": "google-sub-123456",
+            "email": "verified@example.com",
+            "name": "Same Display Name",
+            "email_verified": True,
+        },
+    )
+    verified = api_client.post("/auth/google", json={"id_token": "real-token"})
+    assert verified.status_code == 200
+    assert verified.json()["username"] == "verified"
+
+    monkeypatch.setattr(
+        google_id_token,
+        "verify_oauth2_token",
+        lambda *args, **kwargs: {
+            "sub": "google-sub-unverified",
+            "email": "unverified@example.com",
+            "name": "Unverified",
+            "email_verified": False,
+        },
+    )
+    unverified = api_client.post("/auth/google", json={"id_token": "real-token"})
+    assert unverified.status_code == 403
+
+
 def test_signup_and_login_use_real_authentication(api_client: TestClient):
     """Signup creates a user and login returns a usable bearer token."""
     create_account(api_client, "alice", "alice@example.com")
