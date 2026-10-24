@@ -379,7 +379,10 @@ def analysis_job_status(job_id: str, current_user: dict = Depends(get_current_us
         "completed_at": job["completed_at"],
         "events": job["events"],
         "result": job["result"],
-        "error": job["error"],
+        "error": (
+            "Analysis failed. Check the service logs or contact an operator."
+            if job["status"] == "failed" else None
+        ),
     }
 
 

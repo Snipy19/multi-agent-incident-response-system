@@ -322,6 +322,30 @@ def claim_next_analysis_job():
     return data
 
 
+def requeue_stale_analysis_jobs(max_age_minutes: int = 30):
+    """Return jobs abandoned by a crashed worker to the durable queue."""
+    cutoff = datetime.now(timezone.utc).timestamp() - (max_age_minutes * 60)
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT id, started_at FROM analysis_jobs WHERE status = 'running'"
+        ).fetchall()
+        for row in rows:
+            started_at = row["started_at"]
+            if not started_at:
+                continue
+            parsed = datetime.fromisoformat(started_at)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            if parsed.timestamp() < cutoff:
+                conn.execute(
+                    """UPDATE analysis_jobs
+                       SET status = 'queued', started_at = NULL,
+                           error = 'Worker restarted before the analysis completed.'
+                       WHERE id = ? AND status = 'running'""",
+                    (row["id"],),
+                )
+
+
 def append_analysis_job_event(job_id: str, event: dict):
     with get_connection() as conn:
         row = conn.execute(

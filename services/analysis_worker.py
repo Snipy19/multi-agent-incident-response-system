@@ -14,6 +14,7 @@ from db.database import (
     claim_next_analysis_job,
     complete_analysis_job,
     fail_analysis_job,
+    requeue_stale_analysis_jobs,
     save_incident,
 )
 
@@ -126,6 +127,7 @@ _worker = AnalysisWorker()
 
 
 def start_analysis_worker() -> None:
+    requeue_stale_analysis_jobs()
     _worker.start()
 
 

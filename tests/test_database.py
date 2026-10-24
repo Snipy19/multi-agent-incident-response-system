@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -101,3 +101,22 @@ def test_analysis_job_claim_and_completion_round_trip(isolated_database):
     stored = isolated_database.get_analysis_job("job-1", "user-1")
     assert stored["status"] == "completed"
     assert stored["result"] == {"incident_id": "incident-1"}
+
+
+def test_stale_running_analysis_job_is_requeued(isolated_database):
+    isolated_database.create_analysis_job(
+        "job-stale",
+        "user-1",
+        {"raw_log": "ERROR timeout", "agent_mode": "adaptive"},
+    )
+    claimed = isolated_database.claim_next_analysis_job()
+    assert claimed["status"] == "running"
+
+    with isolated_database.get_connection() as conn:
+        conn.execute(
+            "UPDATE analysis_jobs SET started_at = ? WHERE id = ?",
+            ((datetime.now(timezone.utc) - timedelta(minutes=31)).isoformat(), "job-stale"),
+        )
+
+    isolated_database.requeue_stale_analysis_jobs()
+    assert isolated_database.get_analysis_job("job-stale", "user-1")["status"] == "queued"
