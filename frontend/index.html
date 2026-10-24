@@ -320,7 +320,7 @@
     function renderReport(text) {
         // The writer returns lightweight Markdown. Escape first so LLM output
         // can never become executable HTML, then render only safe formatting.
-        return escapeHtml(text)
+        return escapeHtml(normalizeDisplayText(text))
             .replace(/â€™/g, "&#39;")
             .replace(/â€‘|â€“|â€”/g, "-")
             .replace(/â€¢/g, "&bull;")
@@ -386,8 +386,22 @@
 
     const _rawConfidenceDisplay = confidenceDisplay;
     confidenceDisplay = function(score, label = "Evidence estimate") {
-        return _rawConfidenceDisplay(score, label).replace(/\u00c2\u00b7/g, " - ");
+        return normalizeDisplayText(_rawConfidenceDisplay(score, label));
     };
+
+    function normalizeDisplayText(value) {
+        // Keep older stored reports readable when they contain UTF-8 decoded
+        // as Windows-1252. New output remains UTF-8/ASCII-safe.
+        return String(value ?? "")
+            .replace(/\u00b7/g, " - ")
+            .replace(/\u2022/g, "-")
+            .replace(/\u00c2\u00b7/g, " - ")
+            .replace(/\u00e2\u20ac\u00a2/g, "-")
+            .replace(/\u00e2\u20ac\u202f/g, " ")
+            .replace(/\u00e2\u20ac\u2013|\u00e2\u20ac\u2014|\u00e2\u20ac\u2011/g, "-")
+            .replace(/\u00e2\u20ac\u2122/g, "'")
+            .replace(/\u00e2\u20ac\u0153|\u00e2\u20ac\u009d/g, '"');
+    }
 
     function formatDateTime(isoString) {
         const d = new Date(isoString);
@@ -667,14 +681,14 @@
         document.getElementById("rootCause").textContent = data.root_cause;
         document.getElementById("rootConfidenceReason").textContent = "Confidence basis: " + (data.root_cause_confidence_reason || "Not provided");
         const rootBadge = document.getElementById("rootConfidence");
-        rootBadge.textContent = `${data.root_cause_certainty || "Inconclusive"} · ${confidenceDisplay(data.root_cause_confidence)}`;
+        rootBadge.textContent = `${data.root_cause_certainty || "Inconclusive"} - ${confidenceDisplay(data.root_cause_confidence)}`;
         rootBadge.className = "confidence-tag " + confidenceClass(data.root_cause_confidence);
         rootBadge.textContent = rootBadge.textContent.replace(/\u00c2\u00b7/g, " - ");
 
         document.getElementById("suggestedFix").textContent = data.suggested_fix;
         document.getElementById("fixConfidenceReason").textContent = "Confidence basis: " + (data.fix_confidence_reason || "Not provided");
         const fixBadge = document.getElementById("fixConfidence");
-        fixBadge.textContent = `${data.fix_certainty || "Inconclusive"} · ${confidenceDisplay(data.fix_confidence)}`;
+        fixBadge.textContent = `${data.fix_certainty || "Inconclusive"} - ${confidenceDisplay(data.fix_confidence)}`;
         fixBadge.className = "confidence-tag " + confidenceClass(data.fix_confidence);
         fixBadge.textContent = fixBadge.textContent.replace(/\u00c2\u00b7/g, " - ");
 
