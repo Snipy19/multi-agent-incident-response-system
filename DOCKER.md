@@ -74,5 +74,6 @@ docker compose down
 ```
 
 The current Compose file mounts `./db` for local SQLite persistence. During
-AWS deployment, remove that mount and configure the application to use the RDS
-PostgreSQL connection string instead.
+AWS deployment, remove that mount and set `DATABASE_URL` to the RDS
+PostgreSQL connection string instead. Leaving `DATABASE_URL` empty keeps the
+local SQLite path for development.

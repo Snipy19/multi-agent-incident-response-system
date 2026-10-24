@@ -1,7 +1,8 @@
 """
 DATABASE LAYER
 ------------------
-SQLite persistence for password/Google users, incidents, and password-reset OTPs.
+SQLite persistence for local development and PostgreSQL persistence for
+production deployments. Both backends expose the same application contract.
 """
 
 import hashlib
@@ -14,17 +15,59 @@ from datetime import datetime, timezone
 from contextlib import contextmanager
 
 DB_PATH = "db/incidents.db"
+DATABASE_URL = os.getenv("DATABASE_URL", "").strip()
+
+
+def _uses_postgres() -> bool:
+    return DATABASE_URL.startswith(("postgres://", "postgresql://"))
+
+
+class _ConnectionAdapter:
+    """Keep the existing qmark SQL contract across SQLite and psycopg."""
+
+    def __init__(self, connection, postgres: bool):
+        self._connection = connection
+        self.postgres = postgres
+
+    def execute(self, query: str, parameters=()):
+        if self.postgres:
+            query = query.replace("BEGIN IMMEDIATE", "BEGIN").replace("?", "%s")
+        return self._connection.execute(query, parameters)
+
+    def __getattr__(self, name):
+        return getattr(self._connection, name)
+
+
+def _open_connection() -> _ConnectionAdapter:
+    if _uses_postgres():
+        try:
+            import psycopg
+            from psycopg.rows import dict_row
+        except ImportError as exc:
+            raise RuntimeError(
+                "DATABASE_URL is configured for PostgreSQL, but psycopg is not installed"
+            ) from exc
+        return _ConnectionAdapter(
+            psycopg.connect(DATABASE_URL, row_factory=dict_row),
+            postgres=True,
+        )
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return _ConnectionAdapter(conn, postgres=False)
 
 
 @contextmanager
 def get_connection():
-    # A fresh connection per operation keeps SQLite usage isolated and makes
-    # the data layer easy to replace with a managed database later.
-    conn = sqlite3.connect(DB_PATH)
-    conn.row_factory = sqlite3.Row
+    # A fresh connection per operation keeps local SQLite usage isolated and
+    # lets PostgreSQL use its normal connection/transaction semantics.
+    conn = _open_connection()
     try:
         yield conn
         conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
     finally:
         conn.close()
 
@@ -71,9 +114,19 @@ def init_db():
         """)
         # Existing local databases predate the confidence-basis fields. Keep
         # them usable and make downloaded reports match the live result.
-        columns = {
-            row[1] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()
-        }
+        if _uses_postgres():
+            columns = {
+                row["column_name"]
+                for row in conn.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() AND table_name = ?",
+                    ("incidents",),
+                ).fetchall()
+            }
+        else:
+            columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(incidents)").fetchall()
+            }
         columns_to_add = {
             "root_cause_certainty": "TEXT",
             "root_cause_confidence_reason": "TEXT",
@@ -118,14 +171,25 @@ def init_db():
                 request_count INTEGER NOT NULL
             )
         """)
-        job_columns = {
-            row[1] for row in conn.execute("PRAGMA table_info(analysis_jobs)").fetchall()
-        }
+        if _uses_postgres():
+            job_columns = {
+                row["column_name"]
+                for row in conn.execute(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = current_schema() AND table_name = ?",
+                    ("analysis_jobs",),
+                ).fetchall()
+            }
+        else:
+            job_columns = {
+                row[1] for row in conn.execute("PRAGMA table_info(analysis_jobs)").fetchall()
+            }
         if "events" not in job_columns:
             conn.execute("ALTER TABLE analysis_jobs ADD COLUMN events TEXT NOT NULL DEFAULT '[]'")
         if "heartbeat_at" not in job_columns:
             conn.execute("ALTER TABLE analysis_jobs ADD COLUMN heartbeat_at TEXT")
-    print("[DATABASE] Tables are ready: users, incidents, password_reset_otps, analysis_jobs")
+    backend = "postgresql" if _uses_postgres() else "sqlite"
+    print(f"[DATABASE] Tables are ready ({backend}): users, incidents, password_reset_otps, analysis_jobs")
 
 
 # ---------- USER FUNCTIONS (password-based) ----------
@@ -193,10 +257,19 @@ def _otp_digest(otp: str) -> str:
 
 def save_otp(username: str, otp: str, expires_at: str):
     with get_connection() as conn:
-        conn.execute(
-            "INSERT OR REPLACE INTO password_reset_otps (username, otp, expires_at, created_at) VALUES (?, ?, ?, ?)",
-            (username, _otp_digest(otp), expires_at, datetime.now(timezone.utc).isoformat())
-        )
+        values = (username, _otp_digest(otp), expires_at, datetime.now(timezone.utc).isoformat())
+        if _uses_postgres():
+            conn.execute(
+                "INSERT INTO password_reset_otps (username, otp, expires_at, created_at) "
+                "VALUES (?, ?, ?, ?) ON CONFLICT (username) DO UPDATE SET "
+                "otp = EXCLUDED.otp, expires_at = EXCLUDED.expires_at, created_at = EXCLUDED.created_at",
+                values,
+            )
+        else:
+            conn.execute(
+                "INSERT OR REPLACE INTO password_reset_otps (username, otp, expires_at, created_at) VALUES (?, ?, ?, ?)",
+                values,
+            )
 
 
 def verify_otp(stored_otp: str, candidate_otp: str) -> bool:
@@ -441,9 +514,20 @@ def consume_rate_limit(rate_key: str, limit: int, window_seconds: int) -> bool:
     with get_connection() as conn:
         # Serialize the read/update pair so concurrent API requests cannot
         # both pass the last available slot in the same SQLite process.
-        conn.execute("BEGIN IMMEDIATE")
+        if _uses_postgres():
+            conn.execute("BEGIN")
+            inserted = conn.execute(
+                "INSERT INTO rate_limits (rate_key, window_started_at, request_count) "
+                "VALUES (?, ?, 1) ON CONFLICT (rate_key) DO NOTHING RETURNING rate_key",
+                (rate_key, now.isoformat()),
+            ).fetchone()
+            if inserted is not None:
+                return True
+        else:
+            conn.execute("BEGIN IMMEDIATE")
         row = conn.execute(
-            "SELECT window_started_at, request_count FROM rate_limits WHERE rate_key = ?",
+            "SELECT window_started_at, request_count FROM rate_limits WHERE rate_key = ?"
+            + (" FOR UPDATE" if _uses_postgres() else ""),
             (rate_key,),
         ).fetchone()
         if row is None:
