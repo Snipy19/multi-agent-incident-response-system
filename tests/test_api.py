@@ -45,6 +45,9 @@ def test_health_endpoint_is_public(api_client: TestClient):
 
     assert response.status_code == 200
     assert response.json()["status"] == "ok"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert response.headers["x-frame-options"] == "DENY"
+    assert response.headers["referrer-policy"] == "strict-origin-when-cross-origin"
 
 
 def test_forgot_password_rejects_unknown_username_before_otp_step(api_client):

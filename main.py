@@ -65,6 +65,20 @@ app = FastAPI(title="Autonomous Incident Response API", lifespan=lifespan)
 
 init_db()
 
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Apply safe browser defaults without requiring a frontend rewrite."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault(
+        "Permissions-Policy",
+        "camera=(), microphone=(), geolocation=()",
+    )
+    return response
+
 app.add_middleware(
     CORSMiddleware,
     # Explicit origins prevent arbitrary websites from calling the API from a
