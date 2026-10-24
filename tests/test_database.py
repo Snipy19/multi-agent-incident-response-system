@@ -108,6 +108,24 @@ def test_analysis_job_claim_and_completion_round_trip(isolated_database):
     assert stored["heartbeat_at"] is None
 
 
+def test_failed_analysis_job_stores_only_a_safe_error_code(isolated_database):
+    isolated_database.create_analysis_job(
+        "job-failure",
+        "user-1",
+        {"raw_log": "ERROR timeout", "agent_mode": "adaptive"},
+    )
+
+    isolated_database.fail_analysis_job(
+        "job-failure",
+        "api_key=secret-value provider response with incident details",
+    )
+
+    stored = isolated_database.get_analysis_job("job-failure", "user-1")
+    assert stored["status"] == "failed"
+    assert stored["error"] == "analysis_failed"
+    assert "secret-value" not in stored["error"]
+
+
 def test_stale_running_analysis_job_is_requeued(isolated_database):
     isolated_database.create_analysis_job(
         "job-stale",

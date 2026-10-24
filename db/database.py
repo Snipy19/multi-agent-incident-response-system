@@ -11,6 +11,7 @@ import os
 import secrets
 import sqlite3
 import json
+import re
 from datetime import datetime, timezone
 from contextlib import contextmanager
 
@@ -497,11 +498,20 @@ def complete_analysis_job(job_id: str, result: dict):
 
 
 def fail_analysis_job(job_id: str, error: str):
+    """Mark a job failed without persisting provider or request details.
+
+    Callers may have an exception object or an untrusted provider message.
+    Store only a short machine-readable error code; raw exception details must
+    stay out of the application database.
+    """
+    candidate = str(error or "").strip()
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]{0,63}", candidate):
+        candidate = "analysis_failed"
     with get_connection() as conn:
         conn.execute(
             """UPDATE analysis_jobs SET status = 'failed', error = ?, completed_at = ?, heartbeat_at = NULL
                WHERE id = ?""",
-            (error[:2000], datetime.now(timezone.utc).isoformat(), job_id),
+            (candidate, datetime.now(timezone.utc).isoformat(), job_id),
         )
 
 

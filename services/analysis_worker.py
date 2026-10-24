@@ -122,7 +122,7 @@ class AnalysisWorker:
                 "stage": "error",
                 "message": "Analysis failed. Check the service logs for details.",
             })
-            fail_analysis_job(job["id"], str(exc))
+            fail_analysis_job(job["id"], type(exc).__name__)
             print(
                 f"[JOBS] Analysis job {job['id']} failed: "
                 f"{type(exc).__name__}"
