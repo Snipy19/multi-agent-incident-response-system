@@ -88,6 +88,10 @@
         : "http://127.0.0.1:8000";
     let mode = "login";
 
+    // Remove tokens left by pre-cookie versions of the UI. Current browser
+    // sessions are authenticated only by the HttpOnly cookie.
+    localStorage.removeItem("access_token");
+
     function toggleMode() {
         mode = mode === "login" ? "signup" : "login";
         document.getElementById("formTitle").textContent = mode === "login" ? "Sign In" : "Create Account";

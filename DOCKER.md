@@ -37,6 +37,15 @@ The API health check is available at:
 http://127.0.0.1:8000/
 ```
 
+Container readiness, including a real persistence check, is available at:
+
+```text
+http://127.0.0.1:8000/health/ready
+```
+
+The container healthcheck uses `/health/ready`; `/health/live` is a
+process-only liveness probe.
+
 ## Stop the service
 
 ```powershell

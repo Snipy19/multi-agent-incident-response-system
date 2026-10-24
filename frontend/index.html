@@ -290,6 +290,10 @@
         : "http://127.0.0.1:8000";
     let activeIncidentId = null;
 
+    // Remove tokens left by pre-cookie versions of the UI. Current browser
+    // sessions are authenticated only by the HttpOnly cookie.
+    localStorage.removeItem("access_token");
+
     // ---------- AUTH GUARD ----------
     // Browser authentication uses the HttpOnly access-token cookie. The API
     // still accepts bearer headers for CLI/API clients, but the UI never reads
