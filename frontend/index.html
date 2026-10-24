@@ -291,15 +291,17 @@
     let activeIncidentId = null;
 
     // ---------- AUTH GUARD ----------
-    // Redirect unauthenticated users before loading private incident data.
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-        window.location.href = "login.html";
-    }
+    // Browser authentication uses the HttpOnly access-token cookie. The API
+    // still accepts bearer headers for CLI/API clients, but the UI never reads
+    // or stores the JWT in JavaScript-accessible storage.
     document.getElementById("usernameDisplay").textContent = localStorage.getItem("username") || "";
 
     function authHeaders() {
-        return { "Authorization": "Bearer " + localStorage.getItem("access_token") };
+        return {};
+    }
+
+    function authFetch(url, options = {}) {
+        return fetch(url, { credentials: "include", ...options });
     }
 
     function escapeHtml(value) {
@@ -340,9 +342,12 @@
     }
 
     function logout() {
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("username");
-        window.location.href = "login.html";
+        authFetch(`${API_BASE}/logout`, { method: "POST" })
+            .finally(() => {
+                localStorage.removeItem("access_token");
+                localStorage.removeItem("username");
+                window.location.href = "login.html";
+            });
     }
 
     function handleAuthError(response) {
@@ -399,7 +404,7 @@
     async function loadIncidentList() {
         const listEl = document.getElementById("incidentList");
         try {
-            const res = await fetch(`${API_BASE}/incidents`, { headers: authHeaders() });
+            const res = await authFetch(`${API_BASE}/incidents`, { headers: authHeaders() });
             if (handleAuthError(res)) return;
             const incidents = await res.json();
 
@@ -435,7 +440,7 @@
         document.getElementById("newBtnTop").style.display = "inline-block";
 
         try {
-            const res = await fetch(`${API_BASE}/incidents/${id}`, { headers: authHeaders() });
+            const res = await authFetch(`${API_BASE}/incidents/${id}`, { headers: authHeaders() });
             if (handleAuthError(res)) return;
             const data = await res.json();
             renderResult(data);
@@ -501,7 +506,7 @@
         const targetAgentCount = Number(document.getElementById("targetAgentCount").value);
 
         try {
-            const response = await fetch(`${API_BASE}/analyze/jobs`, {
+            const response = await authFetch(`${API_BASE}/analyze/jobs`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...authHeaders() },
                 body: JSON.stringify({
@@ -518,7 +523,7 @@
             let completed = false;
 
             while (!completed) {
-                const statusResponse = await fetch(
+                const statusResponse = await authFetch(
                     `${API_BASE}/analyze/jobs/${encodeURIComponent(queued.job_id)}`,
                     { headers: authHeaders() }
                 );
@@ -542,7 +547,7 @@
                 if (job.status === "completed") {
                     const incidentId = job.result && job.result.incident_id;
                     if (!incidentId) throw new Error("The worker completed without an incident id");
-                    const incidentResponse = await fetch(
+                    const incidentResponse = await authFetch(
                         `${API_BASE}/incidents/${encodeURIComponent(incidentId)}`,
                         { headers: authHeaders() }
                     );
@@ -584,7 +589,7 @@
 
         try {
             // Token header bhejna hai, isliye simple link nahi, fetch + blob use karte hain
-            const res = await fetch(`${API_BASE}/incidents/${activeIncidentId}/report?format=${fmt}`, {
+            const res = await authFetch(`${API_BASE}/incidents/${activeIncidentId}/report?format=${fmt}`, {
                 headers: authHeaders()
             });
             if (handleAuthError(res)) return;

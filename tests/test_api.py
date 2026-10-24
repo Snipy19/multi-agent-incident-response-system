@@ -162,6 +162,28 @@ def test_signup_and_login_use_real_authentication(api_client: TestClient):
     assert body["access_token"]
 
 
+def test_browser_auth_uses_httponly_cookie_and_logout_clears_it(api_client: TestClient):
+    """The browser session works without exposing the JWT to JavaScript."""
+    response = api_client.post(
+        "/signup",
+        json={"username": "cookieuser", "email": "cookie@example.com", "password": "StrongPass123!"},
+    )
+
+    assert response.status_code == 200
+    cookie = response.headers["set-cookie"]
+    assert "access_token=" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=lax" in cookie
+
+    protected = api_client.get("/incidents")
+    assert protected.status_code == 200
+
+    signed_out = api_client.post("/logout")
+    assert signed_out.status_code == 200
+    assert 'access_token=""' in signed_out.headers["set-cookie"]
+    assert api_client.get("/incidents").status_code == 401
+
+
 def test_protected_routes_reject_missing_authentication(api_client: TestClient):
     """Incident data must never be available to anonymous callers."""
     assert api_client.get("/incidents").status_code == 401

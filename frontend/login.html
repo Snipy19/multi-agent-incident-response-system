@@ -133,6 +133,7 @@
             const response = await fetch(`${API_BASE}${endpoint}`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
+                credentials: "include",
                 body: JSON.stringify(bodyData)
             });
 
@@ -142,7 +143,6 @@
                 throw new Error(data.detail || "Something went wrong");
             }
 
-            localStorage.setItem("access_token", data.access_token);
             localStorage.setItem("username", data.username);
             window.location.href = "index.html";
 
@@ -162,12 +162,12 @@
         fetch(`${API_BASE}/auth/google`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
+            credentials: "include",
             body: JSON.stringify({ id_token: response.credential })
         })
         .then(res => res.json().then(data => ({ ok: res.ok, data })))
         .then(({ ok, data }) => {
             if (!ok) throw new Error(data.detail || "Google sign-in failed");
-            localStorage.setItem("access_token", data.access_token);
             localStorage.setItem("username", data.username);
             window.location.href = "index.html";
         })

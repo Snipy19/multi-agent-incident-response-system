@@ -13,7 +13,7 @@ import json
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -29,7 +29,13 @@ from db.database import (
     get_user_by_google_id, create_google_user,
     save_otp, get_otp, delete_otp, create_analysis_job, get_analysis_job
 )
-from auth import hash_password, verify_password, create_access_token, decode_access_token
+from auth import (
+    hash_password,
+    verify_password,
+    create_access_token,
+    decode_access_token,
+    TOKEN_EXPIRE_HOURS,
+)
 from utils.email_helper import send_otp_email
 from utils.report_export import build_markdown, build_text, build_pdf
 from utils.evidence import compact_repeated_events
@@ -73,6 +79,7 @@ app.add_middleware(
     ],
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=True,
 )
 
 # Serve the frontend from the same origin as the API in local and container
@@ -83,7 +90,30 @@ app.mount("/ui", StaticFiles(directory="frontend", html=True), name="frontend")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="login", auto_error=False)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme)):
+def _set_auth_cookie(response: Response, token: str) -> None:
+    """Issue a browser session cookie without removing API bearer tokens."""
+    response.set_cookie(
+        key="access_token",
+        value=token,
+        max_age=TOKEN_EXPIRE_HOURS * 60 * 60,
+        httponly=True,
+        secure=os.getenv("ENVIRONMENT", "development").lower() == "production",
+        samesite="lax",
+        path="/",
+    )
+
+
+def _clear_auth_cookie(response: Response) -> None:
+    response.delete_cookie("access_token", path="/")
+
+
+def get_current_user(
+    request: Request,
+    token: str | None = Depends(oauth2_scheme),
+):
+    # Bearer headers remain supported for CLI/API clients. Browser sessions use
+    # the HttpOnly cookie so JavaScript cannot read the JWT directly.
+    token = token or request.cookies.get("access_token")
     if token is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
     payload = decode_access_token(token)
@@ -151,7 +181,7 @@ def password_policy_error(password: str) -> str | None:
 # ---------- AUTH ENDPOINTS (username/password) ----------
 
 @app.post("/signup")
-def signup(request: SignupRequest):
+def signup(request: SignupRequest, response: Response):
     if get_user_by_username(request.username):
         raise HTTPException(status_code=400, detail="Username already taken")
     if get_user_by_email(request.email):
@@ -165,16 +195,18 @@ def signup(request: SignupRequest):
     create_user(user_id, request.username, request.email, password_hash)
 
     token = create_access_token(user_id, request.username)
+    _set_auth_cookie(response, token)
     return {"access_token": token, "token_type": "bearer", "username": request.username}
 
 
 @app.post("/login")
-def login(request: LoginRequest):
+def login(request: LoginRequest, response: Response):
     user = get_user_by_username(request.username)
     if not user or not user["password_hash"] or not verify_password(request.password, user["password_hash"]):
         raise HTTPException(status_code=401, detail="Incorrect username or password")
 
     token = create_access_token(user["id"], user["username"])
+    _set_auth_cookie(response, token)
     return {"access_token": token, "token_type": "bearer", "username": user["username"]}
 
 
@@ -187,7 +219,7 @@ def google_config():
     return {"enabled": bool(client_id), "client_id": client_id or None}
 
 @app.post("/auth/google")
-def google_login(request: GoogleLoginRequest):
+def google_login(request: GoogleLoginRequest, response: Response):
     client_id = os.getenv("GOOGLE_CLIENT_ID", "").strip()
     if not client_id:
         print("[AUTH] Google sign-in rejected: GOOGLE_CLIENT_ID is not configured")
@@ -241,7 +273,15 @@ def google_login(request: GoogleLoginRequest):
         username = user["username"]
 
     token = create_access_token(user_id, username)
+    _set_auth_cookie(response, token)
     return {"access_token": token, "token_type": "bearer", "username": username}
+
+
+@app.post("/logout")
+def logout(response: Response):
+    """End the browser session; bearer tokens remain client-managed."""
+    _clear_auth_cookie(response)
+    return {"message": "Signed out"}
 
 
 # ---------- FORGOT PASSWORD / OTP ----------
