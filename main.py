@@ -27,7 +27,8 @@ from db.database import (
     init_db, save_incident, get_all_incidents, get_incident_by_id,
     create_user, get_user_by_username, get_user_by_email, update_user_password,
     get_user_by_google_id, create_google_user,
-    save_otp, get_otp, delete_otp, create_analysis_job, get_analysis_job
+    save_otp, get_otp, delete_otp, create_analysis_job, get_analysis_job,
+    consume_rate_limit
 )
 from db.database import get_connection
 from auth import (
@@ -395,6 +396,7 @@ def analyze_incident(request: LogRequest, current_user: dict = Depends(get_curre
     # This keeps invalid API requests fast and prevents CI validation tests
     # from loading the embedding model unnecessarily.
     initial_state = build_initial_state(request)
+    enforce_analysis_rate_limit(current_user)
     result = get_graph_app().invoke(initial_state)
 
     incident_id = str(uuid.uuid4())
@@ -428,6 +430,7 @@ def analyze_incident(request: LogRequest, current_user: dict = Depends(get_curre
 def submit_analysis_job(request: LogRequest, current_user: dict = Depends(get_current_user)):
     """Queue an analysis and return immediately with a durable job id."""
     initial_state = build_initial_state(request)
+    enforce_analysis_rate_limit(current_user)
     job_id = str(uuid.uuid4())
     create_analysis_job(job_id, current_user["user_id"], initial_state)
     start_analysis_worker()
@@ -492,6 +495,24 @@ def build_initial_state(request: LogRequest) -> dict:
     }
 
 
+def enforce_analysis_rate_limit(current_user: dict) -> None:
+    """Protect the costly LLM path with a deployment-configurable quota."""
+    try:
+        limit = int(os.getenv("ANALYSIS_RATE_LIMIT_PER_HOUR", "20"))
+    except ValueError:
+        limit = 20
+    if not consume_rate_limit(
+        f"analysis:{current_user['user_id']}",
+        limit=max(limit, 1),
+        window_seconds=60 * 60,
+    ):
+        raise HTTPException(
+            status_code=429,
+            detail="Analysis limit reached. Try again later.",
+            headers={"Retry-After": "3600"},
+        )
+
+
 def _sse_event(payload: dict) -> str:
     """Encode one browser-friendly Server-Sent Event."""
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
@@ -527,6 +548,7 @@ def _stage_event(node: str, update: dict) -> dict | None:
 def stream_analysis(request: LogRequest, current_user: dict = Depends(get_current_user)):
     """Run the real graph while streaming stage updates to the browser."""
     initial_state = build_initial_state(request)
+    enforce_analysis_rate_limit(current_user)
 
     def event_generator():
         current_state = dict(initial_state)

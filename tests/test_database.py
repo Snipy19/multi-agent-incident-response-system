@@ -146,3 +146,17 @@ def test_recent_job_heartbeat_prevents_stale_requeue(isolated_database):
 
     isolated_database.requeue_stale_analysis_jobs()
     assert isolated_database.get_analysis_job("job-active", "user-1")["status"] == "running"
+
+
+def test_persistent_rate_limit_resets_after_window(isolated_database):
+    assert isolated_database.consume_rate_limit("analysis:user-1", 2, 60)
+    assert isolated_database.consume_rate_limit("analysis:user-1", 2, 60)
+    assert not isolated_database.consume_rate_limit("analysis:user-1", 2, 60)
+
+    with isolated_database.get_connection() as conn:
+        conn.execute(
+            "UPDATE rate_limits SET window_started_at = ? WHERE rate_key = ?",
+            ((datetime.now(timezone.utc) - timedelta(seconds=61)).isoformat(), "analysis:user-1"),
+        )
+
+    assert isolated_database.consume_rate_limit("analysis:user-1", 2, 60)

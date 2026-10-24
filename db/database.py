@@ -107,6 +107,13 @@ def init_db():
                 completed_at TEXT
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS rate_limits (
+                rate_key TEXT PRIMARY KEY,
+                window_started_at TEXT NOT NULL,
+                request_count INTEGER NOT NULL
+            )
+        """)
         job_columns = {
             row[1] for row in conn.execute("PRAGMA table_info(analysis_jobs)").fetchall()
         }
@@ -391,3 +398,44 @@ def fail_analysis_job(job_id: str, error: str):
                WHERE id = ?""",
             (error[:2000], datetime.now(timezone.utc).isoformat(), job_id),
         )
+
+
+def consume_rate_limit(rate_key: str, limit: int, window_seconds: int) -> bool:
+    """Atomically consume one request from a persistent fixed-window limit."""
+    if limit < 1 or window_seconds < 1:
+        raise ValueError("limit and window_seconds must be positive")
+
+    now = datetime.now(timezone.utc)
+    with get_connection() as conn:
+        # Serialize the read/update pair so concurrent API requests cannot
+        # both pass the last available slot in the same SQLite process.
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT window_started_at, request_count FROM rate_limits WHERE rate_key = ?",
+            (rate_key,),
+        ).fetchone()
+        if row is None:
+            conn.execute(
+                "INSERT INTO rate_limits (rate_key, window_started_at, request_count) VALUES (?, ?, 1)",
+                (rate_key, now.isoformat()),
+            )
+            return True
+
+        window_started = datetime.fromisoformat(row["window_started_at"])
+        if window_started.tzinfo is None:
+            window_started = window_started.replace(tzinfo=timezone.utc)
+        if (now - window_started).total_seconds() >= window_seconds:
+            conn.execute(
+                "UPDATE rate_limits SET window_started_at = ?, request_count = 1 WHERE rate_key = ?",
+                (now.isoformat(), rate_key),
+            )
+            return True
+
+        if row["request_count"] >= limit:
+            return False
+
+        conn.execute(
+            "UPDATE rate_limits SET request_count = request_count + 1 WHERE rate_key = ?",
+            (rate_key,),
+        )
+        return True

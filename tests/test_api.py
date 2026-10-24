@@ -270,6 +270,28 @@ def test_analysis_job_submission_is_durable_and_user_scoped(api_client, monkeypa
     assert hidden.status_code == 404
 
 
+def test_analysis_rate_limit_is_enforced_before_expensive_work(api_client, monkeypatch):
+    account = create_account(api_client, "limiteduser", "limited@example.com")
+    headers = {"Authorization": f"Bearer {account['access_token']}"}
+    monkeypatch.setenv("ANALYSIS_RATE_LIMIT_PER_HOUR", "1")
+    monkeypatch.setattr("main.start_analysis_worker", lambda: None)
+
+    first = api_client.post(
+        "/analyze/jobs",
+        json={"raw_log": "CRITICAL checkout-api database timeout"},
+        headers=headers,
+    )
+    second = api_client.post(
+        "/analyze/jobs",
+        json={"raw_log": "CRITICAL checkout-api database timeout"},
+        headers=headers,
+    )
+
+    assert first.status_code == 202
+    assert second.status_code == 429
+    assert second.headers["retry-after"] == "3600"
+
+
 def test_incident_data_is_scoped_to_the_authenticated_user(api_client: TestClient):
     """A user's incident list must not expose another user's records."""
     alice = create_account(api_client, "alice", "alice@example.com")
