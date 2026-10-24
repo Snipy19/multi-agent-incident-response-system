@@ -10,6 +10,7 @@ import uuid
 import sqlite3
 
 from db.database import (
+    append_analysis_job_event,
     claim_next_analysis_job,
     complete_analysis_job,
     fail_analysis_job,
@@ -63,12 +64,60 @@ class AnalysisWorker:
             # checks, and job submission never load the expensive LLM/RAG stack.
             from graph import app as graph_app
 
-            result = graph_app.invoke(job["request_state"])
+            current_state = dict(job["request_state"])
+            current_state["investigation_findings"] = []
+            for update in graph_app.stream(job["request_state"], stream_mode="updates"):
+                for node, node_update in update.items():
+                    if not isinstance(node_update, dict):
+                        continue
+                    if node == "investigator":
+                        current_state["investigation_findings"].extend(
+                            node_update.get("investigation_findings") or []
+                        )
+                        findings = node_update.get("investigation_findings") or []
+                        angle = findings[0].get("angle", "unknown angle") if findings else "unknown angle"
+                        event = {
+                            "type": "investigator",
+                            "stage": "investigator",
+                            "message": f"Investigator completed: {angle}.",
+                            "angle": angle,
+                        }
+                    else:
+                        current_state.update({
+                            key: value
+                            for key, value in node_update.items()
+                            if key != "investigation_findings"
+                        })
+                        labels = {
+                            "triage_planner": "Triage planner completed.",
+                            "aggregator": "Aggregator completed.",
+                            "fix_suggester": "Remediation recommendation completed.",
+                            "report_writer": "Report preparation completed.",
+                        }
+                        event = {
+                            "type": "stage",
+                            "stage": node,
+                            "message": labels.get(node, f"{node} completed."),
+                        }
+                    append_analysis_job_event(job["id"], event)
+
+            result = current_state
             incident_id = str(uuid.uuid4())
             save_incident(incident_id, job["user_id"], result)
+            append_analysis_job_event(job["id"], {
+                "type": "complete",
+                "stage": "complete",
+                "message": "Analysis complete.",
+                "incident_id": incident_id,
+            })
             complete_analysis_job(job["id"], {"incident_id": incident_id})
             print(f"[JOBS] Analysis job {job['id']} completed")
         except Exception as exc:
+            append_analysis_job_event(job["id"], {
+                "type": "error",
+                "stage": "error",
+                "message": "Analysis failed. Check the service logs for details.",
+            })
             fail_analysis_job(job["id"], str(exc))
             print(f"[JOBS] Analysis job {job['id']} failed: {exc}")
 

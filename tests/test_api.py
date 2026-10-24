@@ -198,6 +198,7 @@ def test_analysis_job_submission_is_durable_and_user_scoped(api_client, monkeypa
     status = api_client.get(f"/analyze/jobs/{job_id}", headers=alice_headers)
     assert status.status_code == 200
     assert status.json()["status"] == "queued"
+    assert status.json()["events"][0]["type"] == "queued"
 
     hidden = api_client.get(f"/analyze/jobs/{job_id}", headers=bob_headers)
     assert hidden.status_code == 404

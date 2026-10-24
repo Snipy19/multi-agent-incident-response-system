@@ -48,7 +48,11 @@ def get_graph_app():
 async def lifespan(_app: FastAPI):
     """Start and stop the durable queue worker with the API process."""
     start_analysis_worker()
-    yield
+    try:
+        yield
+    finally:
+        from services.analysis_worker import stop_analysis_worker
+        stop_analysis_worker()
 
 
 app = FastAPI(title="Autonomous Incident Response API", lifespan=lifespan)
@@ -354,6 +358,7 @@ def analysis_job_status(job_id: str, current_user: dict = Depends(get_current_us
         "created_at": job["created_at"],
         "started_at": job["started_at"],
         "completed_at": job["completed_at"],
+        "events": job["events"],
         "result": job["result"],
         "error": job["error"],
     }

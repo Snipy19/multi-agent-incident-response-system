@@ -98,6 +98,7 @@ def init_db():
                 user_id TEXT NOT NULL,
                 request_state TEXT NOT NULL,
                 status TEXT NOT NULL,
+                events TEXT NOT NULL DEFAULT '[]',
                 result TEXT,
                 error TEXT,
                 created_at TEXT NOT NULL,
@@ -105,6 +106,11 @@ def init_db():
                 completed_at TEXT
             )
         """)
+        job_columns = {
+            row[1] for row in conn.execute("PRAGMA table_info(analysis_jobs)").fetchall()
+        }
+        if "events" not in job_columns:
+            conn.execute("ALTER TABLE analysis_jobs ADD COLUMN events TEXT NOT NULL DEFAULT '[]'")
     print("[DATABASE] Tables are ready: users, incidents, password_reset_otps, analysis_jobs")
 
 
@@ -264,9 +270,15 @@ def create_analysis_job(job_id: str, user_id: str, request_state: dict):
     with get_connection() as conn:
         conn.execute(
             """INSERT INTO analysis_jobs
-               (id, user_id, request_state, status, created_at)
-               VALUES (?, ?, ?, 'queued', ?)""",
-            (job_id, user_id, json.dumps(request_state), datetime.now(timezone.utc).isoformat()),
+               (id, user_id, request_state, status, events, created_at)
+               VALUES (?, ?, ?, 'queued', ?, ?)""",
+            (
+                job_id,
+                user_id,
+                json.dumps(request_state),
+                json.dumps([{"type": "queued", "message": "Analysis queued."}]),
+                datetime.now(timezone.utc).isoformat(),
+            ),
         )
 
 
@@ -280,6 +292,7 @@ def get_analysis_job(job_id: str, user_id: str):
         return None
     data = dict(row)
     data["request_state"] = json.loads(data["request_state"])
+    data["events"] = json.loads(data.get("events") or "[]")
     data["result"] = json.loads(data["result"]) if data["result"] else None
     return data
 
@@ -305,7 +318,23 @@ def claim_next_analysis_job():
         ).fetchone()
     data = dict(claimed)
     data["request_state"] = json.loads(data["request_state"])
+    data["events"] = json.loads(data.get("events") or "[]")
     return data
+
+
+def append_analysis_job_event(job_id: str, event: dict):
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT events FROM analysis_jobs WHERE id = ?", (job_id,)
+        ).fetchone()
+        if row is None:
+            return
+        events = json.loads(row["events"] or "[]")
+        events.append(event)
+        conn.execute(
+            "UPDATE analysis_jobs SET events = ? WHERE id = ?",
+            (json.dumps(events), job_id),
+        )
 
 
 def complete_analysis_job(job_id: str, result: dict):

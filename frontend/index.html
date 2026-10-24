@@ -496,7 +496,7 @@
         const targetAgentCount = Number(document.getElementById("targetAgentCount").value);
 
         try {
-            const response = await fetch(`${API_BASE}/analyze/stream`, {
+            const response = await fetch(`${API_BASE}/analyze/jobs`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json", ...authHeaders() },
                 body: JSON.stringify({
@@ -508,39 +508,52 @@
 
             if (handleAuthError(response)) return;
             if (!response.ok) throw new Error(`Server returned ${response.status}`);
-            if (!response.body) throw new Error("Streaming is not supported by this browser");
-
-            const reader = response.body.getReader();
-            const decoder = new TextDecoder();
-            let buffer = "";
+            const queued = await response.json();
+            let seenEvents = 0;
             let completed = false;
-            while (true) {
-                const { value, done } = await reader.read();
-                buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
-                const events = buffer.split("\n\n");
-                buffer = events.pop() || "";
-                for (const eventText of events) {
-                    const dataLine = eventText.split("\n").find(line => line.startsWith("data: "));
-                    if (!dataLine) continue;
-                    const event = JSON.parse(dataLine.slice(6));
-                    if (event.type === "error") throw new Error(event.message);
-                    if (event.message) {
-                        const item = document.createElement("li");
-                        item.textContent = event.message;
-                        progressList.appendChild(item);
-                        progressList.scrollTop = progressList.scrollHeight;
-                    }
-                    if (event.type === "complete") {
-                        completed = true;
-                        activeIncidentId = event.result.id;
-                        renderResult(event.result);
-                        loadIncidentList();
-                        document.getElementById("newBtnTop").style.display = "inline-block";
-                    }
+
+            while (!completed) {
+                const statusResponse = await fetch(
+                    `${API_BASE}/analyze/jobs/${encodeURIComponent(queued.job_id)}`,
+                    { headers: authHeaders() }
+                );
+                if (handleAuthError(statusResponse)) return;
+                if (!statusResponse.ok) throw new Error(`Job status returned ${statusResponse.status}`);
+
+                const job = await statusResponse.json();
+                const events = Array.isArray(job.events) ? job.events : [];
+                events.slice(seenEvents).forEach(event => {
+                    if (!event.message) return;
+                    const item = document.createElement("li");
+                    item.textContent = event.message;
+                    progressList.appendChild(item);
+                    progressList.scrollTop = progressList.scrollHeight;
+                });
+                seenEvents = events.length;
+
+                if (job.status === "failed") {
+                    throw new Error("The analysis worker failed. Check the service logs for details.");
                 }
-                if (done) break;
+                if (job.status === "completed") {
+                    const incidentId = job.result && job.result.incident_id;
+                    if (!incidentId) throw new Error("The worker completed without an incident id");
+                    const incidentResponse = await fetch(
+                        `${API_BASE}/incidents/${encodeURIComponent(incidentId)}`,
+                        { headers: authHeaders() }
+                    );
+                    if (handleAuthError(incidentResponse)) return;
+                    if (!incidentResponse.ok) throw new Error(`Incident returned ${incidentResponse.status}`);
+                    const incident = await incidentResponse.json();
+                    activeIncidentId = incident.id;
+                    renderResult(incident);
+                    loadIncidentList();
+                    document.getElementById("newBtnTop").style.display = "inline-block";
+                    completed = true;
+                    continue;
+                }
+
+                await new Promise(resolve => setTimeout(resolve, 500));
             }
-            if (!completed) throw new Error("The analysis stream ended before completion");
 
         } catch (err) {
             errorMsg.textContent = "Error: " + err.message + " - confirm the backend is running on port 8000.";

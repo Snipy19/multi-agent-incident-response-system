@@ -95,6 +95,7 @@ def test_analysis_job_claim_and_completion_round_trip(isolated_database):
     assert claimed["id"] == "job-1"
     assert claimed["status"] == "running"
     assert claimed["request_state"]["raw_log"] == "ERROR timeout"
+    assert claimed["events"][0]["type"] == "queued"
 
     isolated_database.complete_analysis_job("job-1", {"incident_id": "incident-1"})
     stored = isolated_database.get_analysis_job("job-1", "user-1")
