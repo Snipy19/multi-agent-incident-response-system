@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from langchain_groq import ChatGroq
 from state import IncidentState
 from vectorstore.retriever import retrieve_similar_patterns
-from utils.llm_helper import invoke_with_retry
+from utils.llm_helper import LLM_TIMEOUT_SECONDS, invoke_with_retry
 from utils.guardrails import (
     CERTAINTY_LEVELS,
     clean_model_text,
@@ -23,6 +23,8 @@ llm = ChatGroq(
     temperature=0,
     max_tokens=2048,
     reasoning_effort="low",
+    timeout=LLM_TIMEOUT_SECONDS,
+    max_retries=0,
     api_key=os.getenv("GROQ_API_KEY")
 )
 
