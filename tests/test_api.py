@@ -396,6 +396,25 @@ def test_analysis_rate_limit_is_enforced_before_expensive_work(api_client, monke
     assert second.headers["retry-after"] == "3600"
 
 
+def test_disabled_embedded_worker_is_not_started_on_job_submission(api_client, monkeypatch):
+    account = create_account(api_client, "splitapi", "splitapi@example.com")
+    headers = {"Authorization": f"Bearer {account['access_token']}"}
+    monkeypatch.setenv("ANALYSIS_WORKER_ENABLED", "false")
+    monkeypatch.setattr(
+        "main.start_analysis_worker",
+        lambda: pytest.fail("the API must not start an embedded worker when disabled"),
+    )
+
+    response = api_client.post(
+        "/analyze/jobs",
+        json={"raw_log": "CRITICAL checkout-api database timeout"},
+        headers=headers,
+    )
+
+    assert response.status_code == 202
+    assert response.json()["status"] == "queued"
+
+
 def test_incident_data_is_scoped_to_the_authenticated_user(api_client: TestClient):
     """A user's incident list must not expose another user's records."""
     alice = create_account(api_client, "alice", "alice@example.com")

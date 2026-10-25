@@ -538,7 +538,10 @@ def submit_analysis_job(request: LogRequest, current_user: dict = Depends(get_cu
     enforce_analysis_rate_limit(current_user)
     job_id = str(uuid.uuid4())
     create_analysis_job(job_id, current_user["user_id"], initial_state)
-    start_analysis_worker()
+    # In a split deployment the API only queues work; the standalone worker
+    # owns execution. Preserve the local one-container default when enabled.
+    if analysis_worker_enabled():
+        start_analysis_worker()
     return {
         "job_id": job_id,
         "status": "queued",
