@@ -282,6 +282,34 @@ def verify_otp(stored_otp: str, candidate_otp: str) -> bool:
     return secrets.compare_digest(stored_otp, candidate_otp)
 
 
+def consume_otp(username: str, candidate_otp: str) -> bool:
+    """Atomically consume a valid, unexpired OTP exactly once."""
+    now = datetime.now(timezone.utc)
+    with get_connection() as conn:
+        # Serialize the read/delete pair so concurrent password-reset requests
+        # cannot both use the same one-time code.
+        conn.execute("BEGIN IMMEDIATE")
+        row = conn.execute(
+            "SELECT otp, expires_at FROM password_reset_otps WHERE username = ?"
+            + (" FOR UPDATE" if _uses_postgres() else ""),
+            (username,),
+        ).fetchone()
+        if row is None:
+            return False
+
+        expires_at = datetime.fromisoformat(row["expires_at"])
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if now > expires_at or not verify_otp(row["otp"], candidate_otp):
+            return False
+
+        deleted = conn.execute(
+            "DELETE FROM password_reset_otps WHERE username = ?",
+            (username,),
+        ).rowcount
+        return deleted == 1
+
+
 def get_otp(username: str):
     with get_connection() as conn:
         row = conn.execute(

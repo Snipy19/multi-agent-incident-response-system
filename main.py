@@ -29,7 +29,8 @@ from db.database import (
     init_db, save_incident, get_all_incidents, get_incident_by_id, delete_incident,
     create_user, get_user_by_username, get_user_by_email, update_user_password,
     get_user_by_google_id, create_google_user,
-    save_otp, get_otp, delete_otp, verify_otp, create_analysis_job, get_analysis_job,
+    save_otp, get_otp, delete_otp, verify_otp, consume_otp,
+    create_analysis_job, get_analysis_job,
     consume_rate_limit
 )
 from db.database import get_connection
@@ -461,8 +462,9 @@ def reset_password(request: ResetPasswordRequest):
         raise HTTPException(status_code=400, detail=password_error)
 
     new_hash = hash_password(request.new_password)
+    if not consume_otp(request.username, request.otp):
+        raise HTTPException(status_code=400, detail="OTP has already been used. Please request a new one.")
     update_user_password(request.username, new_hash)
-    delete_otp(request.username)
 
     return {"message": "Password reset successful. You can now sign in."}
 

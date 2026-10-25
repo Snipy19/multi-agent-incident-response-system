@@ -188,6 +188,17 @@ def test_reset_flow_verifies_otp_before_accepting_password(api_client):
     )
     assert reset.status_code == 200
 
+    reused = api_client.post(
+        "/reset-password",
+        json={
+            "username": "resetuser",
+            "otp": "123456",
+            "new_password": "AnotherStrong123!",
+        },
+    )
+    assert reused.status_code == 400
+    assert "No OTP request found" in reused.json()["detail"]
+
     old_login = api_client.post(
         "/login", json={"username": "resetuser", "password": "StrongPass123!"}
     )
