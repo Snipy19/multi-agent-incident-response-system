@@ -8,6 +8,8 @@ can later be replaced by SQS/Celery/RQ when the service moves to AWS.
 import threading
 import uuid
 import sqlite3
+import time
+from datetime import datetime, timezone
 
 from db.database import (
     append_analysis_job_event,
@@ -61,6 +63,7 @@ class AnalysisWorker:
 
     @staticmethod
     def _execute(job: dict) -> None:
+        job_started = time.perf_counter()
         try:
             # Import the graph only inside the worker. Authentication, health
             # checks, and job submission never load the expensive LLM/RAG stack.
@@ -69,6 +72,14 @@ class AnalysisWorker:
             current_state = dict(job["request_state"])
             current_state["investigation_findings"] = []
             heartbeat_analysis_job(job["id"])
+            queue_wait_ms = _elapsed_between_iso(job.get("created_at"), job.get("started_at"))
+            append_analysis_job_event(job["id"], {
+                "type": "started",
+                "stage": "worker",
+                "message": "Analysis worker started.",
+                "queue_wait_ms": queue_wait_ms,
+            })
+            stage_started = time.perf_counter()
             for update in graph_app.stream(job["request_state"], stream_mode="updates"):
                 for node, node_update in update.items():
                     if not isinstance(node_update, dict):
@@ -102,6 +113,8 @@ class AnalysisWorker:
                             "stage": node,
                             "message": labels.get(node, f"{node} completed."),
                         }
+                    event["duration_ms"] = round((time.perf_counter() - stage_started) * 1000, 1)
+                    stage_started = time.perf_counter()
                     heartbeat_analysis_job(job["id"])
                     append_analysis_job_event(job["id"], event)
 
@@ -113,9 +126,13 @@ class AnalysisWorker:
                 "stage": "complete",
                 "message": "Analysis complete.",
                 "incident_id": incident_id,
+                "duration_ms": round((time.perf_counter() - job_started) * 1000, 1),
             })
             complete_analysis_job(job["id"], {"incident_id": incident_id})
-            print(f"[JOBS] Analysis job {job['id']} completed")
+            print(
+                f"[JOBS] Analysis job {job['id']} completed "
+                f"duration_ms={round((time.perf_counter() - job_started) * 1000, 1)}"
+            )
         except Exception as exc:
             append_analysis_job_event(job["id"], {
                 "type": "error",
@@ -127,6 +144,22 @@ class AnalysisWorker:
                 f"[JOBS] Analysis job {job['id']} failed: "
                 f"{type(exc).__name__}"
             )
+
+
+def _elapsed_between_iso(start: str | None, end: str | None) -> float | None:
+    """Return real queue wait in milliseconds when both timestamps exist."""
+    if not start or not end:
+        return None
+    try:
+        start_dt = datetime.fromisoformat(start)
+        end_dt = datetime.fromisoformat(end)
+        if start_dt.tzinfo is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
+        if end_dt.tzinfo is None:
+            end_dt = end_dt.replace(tzinfo=timezone.utc)
+        return round(max((end_dt - start_dt).total_seconds() * 1000, 0), 1)
+    except (TypeError, ValueError):
+        return None
 
 
 _worker = AnalysisWorker()
