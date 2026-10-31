@@ -108,6 +108,50 @@ def test_analysis_job_claim_and_completion_round_trip(isolated_database):
     assert stored["heartbeat_at"] is None
 
 
+def test_analysis_metrics_summary_is_durable_and_user_scoped(isolated_database):
+    isolated_database.create_analysis_job(
+        "job-metrics-complete",
+        "user-1",
+        {"raw_log": "ERROR timeout", "agent_mode": "adaptive"},
+    )
+    isolated_database.complete_analysis_job(
+        "job-metrics-complete",
+        {"incident_id": "incident-1"},
+        metrics={
+            "cost_usd": 0.12,
+            "queue_wait_ms": 5.0,
+            "execution_duration_ms": 250.0,
+        },
+    )
+    isolated_database.create_analysis_job(
+        "job-metrics-failed",
+        "user-1",
+        {"raw_log": "ERROR timeout", "agent_mode": "adaptive"},
+    )
+    isolated_database.fail_analysis_job(
+        "job-metrics-failed",
+        "provider_error",
+        metrics={"cost_usd": None},
+    )
+    isolated_database.create_analysis_job(
+        "job-other-user",
+        "user-2",
+        {"raw_log": "ERROR timeout", "agent_mode": "adaptive"},
+    )
+
+    stored = isolated_database.get_analysis_job("job-metrics-complete", "user-1")
+    summary = isolated_database.get_analysis_metrics_summary("user-1")
+
+    assert stored["metrics"]["cost_usd"] == 0.12
+    assert stored["metrics"]["queue_wait_ms"] == 5.0
+    assert summary["total_analyses"] == 2
+    assert summary["completed"] == 1
+    assert summary["failed"] == 1
+    assert summary["failure_rate"] == 0.5
+    assert summary["known_cost_usd"] == 0.12
+    assert summary["cost_coverage"] == 0.5
+
+
 def test_failed_analysis_job_stores_only_a_safe_error_code(isolated_database):
     isolated_database.create_analysis_job(
         "job-failure",

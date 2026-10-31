@@ -159,6 +159,7 @@ def init_db():
                 events TEXT NOT NULL DEFAULT '[]',
                 result TEXT,
                 error TEXT,
+                metrics TEXT,
                 created_at TEXT NOT NULL,
                 started_at TEXT,
                 heartbeat_at TEXT,
@@ -189,6 +190,8 @@ def init_db():
             conn.execute("ALTER TABLE analysis_jobs ADD COLUMN events TEXT NOT NULL DEFAULT '[]'")
         if "heartbeat_at" not in job_columns:
             conn.execute("ALTER TABLE analysis_jobs ADD COLUMN heartbeat_at TEXT")
+        if "metrics" not in job_columns:
+            conn.execute("ALTER TABLE analysis_jobs ADD COLUMN metrics TEXT")
     backend = "postgresql" if _uses_postgres() else "sqlite"
     print(f"[DATABASE] Tables are ready ({backend}): users, incidents, password_reset_otps, analysis_jobs")
 
@@ -438,6 +441,7 @@ def get_analysis_job(job_id: str, user_id: str):
     data["request_state"] = json.loads(data["request_state"])
     data["events"] = json.loads(data.get("events") or "[]")
     data["result"] = json.loads(data["result"]) if data["result"] else None
+    data["metrics"] = json.loads(data["metrics"]) if data.get("metrics") else None
     return data
 
 
@@ -515,17 +519,22 @@ def append_analysis_job_event(job_id: str, event: dict):
         )
 
 
-def complete_analysis_job(job_id: str, result: dict):
+def complete_analysis_job(job_id: str, result: dict, metrics: dict | None = None):
     with get_connection() as conn:
         conn.execute(
             """UPDATE analysis_jobs
-               SET status = 'completed', result = ?, completed_at = ?, heartbeat_at = NULL
+               SET status = 'completed', result = ?, metrics = ?, completed_at = ?, heartbeat_at = NULL
                WHERE id = ?""",
-            (json.dumps(result), datetime.now(timezone.utc).isoformat(), job_id),
+            (
+                json.dumps(result),
+                json.dumps(metrics) if metrics is not None else None,
+                datetime.now(timezone.utc).isoformat(),
+                job_id,
+            ),
         )
 
 
-def fail_analysis_job(job_id: str, error: str):
+def fail_analysis_job(job_id: str, error: str, metrics: dict | None = None):
     """Mark a job failed without persisting provider or request details.
 
     Callers may have an exception object or an untrusted provider message.
@@ -541,6 +550,51 @@ def fail_analysis_job(job_id: str, error: str):
                WHERE id = ?""",
             (candidate, datetime.now(timezone.utc).isoformat(), job_id),
         )
+
+        if metrics is not None:
+            conn.execute(
+                "UPDATE analysis_jobs SET metrics = ? WHERE id = ?",
+                (json.dumps(metrics), job_id),
+            )
+
+
+def get_analysis_metrics_summary(user_id: str) -> dict:
+    """Return only the authenticated user's durable analysis metrics."""
+    with get_connection() as conn:
+        rows = conn.execute(
+            "SELECT status, metrics FROM analysis_jobs WHERE user_id = ?",
+            (user_id,),
+        ).fetchall()
+
+    counts = {"queued": 0, "running": 0, "completed": 0, "failed": 0}
+    known_costs = []
+    for row in rows:
+        status = row["status"] if isinstance(row, dict) else row[0]
+        if status in counts:
+            counts[status] += 1
+        raw_metrics = row["metrics"] if isinstance(row, dict) else row[1]
+        if not raw_metrics:
+            continue
+        try:
+            metrics = json.loads(raw_metrics)
+        except (TypeError, json.JSONDecodeError):
+            continue
+        cost = metrics.get("cost_usd") if isinstance(metrics, dict) else None
+        if isinstance(cost, (int, float)) and not isinstance(cost, bool):
+            known_costs.append(float(cost))
+
+    total = sum(counts.values())
+    failed = counts["failed"]
+    return {
+        "total_analyses": total,
+        "queued": counts["queued"],
+        "running": counts["running"],
+        "completed": counts["completed"],
+        "failed": failed,
+        "failure_rate": round(failed / total, 4) if total else None,
+        "known_cost_usd": round(sum(known_costs), 8) if known_costs else None,
+        "cost_coverage": round(len(known_costs) / total, 4) if total else 0.0,
+    }
 
 
 def consume_rate_limit(rate_key: str, limit: int, window_seconds: int) -> bool:

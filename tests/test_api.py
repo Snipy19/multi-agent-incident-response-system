@@ -385,6 +385,37 @@ def test_analysis_job_submission_is_durable_and_user_scoped(api_client, monkeypa
     assert hidden.status_code == 404
 
 
+def test_analysis_metrics_are_authenticated_and_user_scoped(api_client, monkeypatch):
+    monkeypatch.setattr("main.start_analysis_worker", lambda: None)
+    alice = create_account(api_client, "metricsalice", "metricsalice@example.com")
+    bob = create_account(api_client, "metricsbob", "metricsbob@example.com")
+    alice_headers = {"Authorization": f"Bearer {alice['access_token']}"}
+    bob_headers = {"Authorization": f"Bearer {bob['access_token']}"}
+
+    queued = api_client.post(
+        "/analyze/jobs",
+        json={"raw_log": "CRITICAL checkout-api database timeout"},
+        headers=alice_headers,
+    )
+    assert queued.status_code == 202
+    database.complete_analysis_job(
+        queued.json()["job_id"],
+        {"incident_id": "incident-metrics"},
+        metrics={"cost_usd": 0.25},
+    )
+
+    api_client.cookies.clear()
+    assert api_client.get("/analyze/metrics").status_code == 401
+    alice_metrics = api_client.get("/analyze/metrics", headers=alice_headers)
+    bob_metrics = api_client.get("/analyze/metrics", headers=bob_headers)
+
+    assert alice_metrics.status_code == 200
+    assert alice_metrics.json()["total_analyses"] == 1
+    assert alice_metrics.json()["known_cost_usd"] == 0.25
+    assert bob_metrics.status_code == 200
+    assert bob_metrics.json()["total_analyses"] == 0
+
+
 def test_analysis_rate_limit_is_enforced_before_expensive_work(api_client, monkeypatch):
     account = create_account(api_client, "limiteduser", "limited@example.com")
     headers = {"Authorization": f"Bearer {account['access_token']}"}

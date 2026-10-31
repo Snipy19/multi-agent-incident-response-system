@@ -65,7 +65,11 @@ Respond ONLY with valid JSON in this exact format:
 }}"""
 
     try:
-        response = invoke_with_retry(llm, prompt)
+        response = invoke_with_retry(
+            llm,
+            prompt,
+            telemetry_id=state.get("telemetry_id"),
+        )
         raw_output = response.content.strip()
         print(
             "[TRIAGE PLANNER AGENT] Received LLM response "

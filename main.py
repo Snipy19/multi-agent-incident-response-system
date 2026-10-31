@@ -30,7 +30,7 @@ from db.database import (
     create_user, get_user_by_username, get_user_by_email, update_user_password,
     get_user_by_google_id, create_google_user,
     save_otp, get_otp, delete_otp, verify_otp, consume_otp,
-    create_analysis_job, get_analysis_job,
+    create_analysis_job, get_analysis_job, get_analysis_metrics_summary,
     consume_rate_limit
 )
 from db.database import get_connection
@@ -536,9 +536,9 @@ def analyze_incident(request: LogRequest, current_user: dict = Depends(get_curre
 @app.post("/analyze/jobs", status_code=202)
 def submit_analysis_job(request: LogRequest, current_user: dict = Depends(get_current_user)):
     """Queue an analysis and return immediately with a durable job id."""
-    initial_state = build_initial_state(request)
-    enforce_analysis_rate_limit(current_user)
     job_id = str(uuid.uuid4())
+    initial_state = build_initial_state(request, telemetry_id=job_id)
+    enforce_analysis_rate_limit(current_user)
     create_analysis_job(job_id, current_user["user_id"], initial_state)
     # In a split deployment the API only queues work; the standalone worker
     # owns execution. Preserve the local one-container default when enabled.
@@ -565,6 +565,7 @@ def analysis_job_status(job_id: str, current_user: dict = Depends(get_current_us
         "completed_at": job["completed_at"],
         "events": job["events"],
         "result": job["result"],
+        "metrics": job["metrics"],
         "error": (
             "Analysis failed. Check the service logs or contact an operator."
             if job["status"] == "failed" else None
@@ -572,7 +573,13 @@ def analysis_job_status(job_id: str, current_user: dict = Depends(get_current_us
     }
 
 
-def build_initial_state(request: LogRequest) -> dict:
+@app.get("/analyze/metrics")
+def analysis_metrics(current_user: dict = Depends(get_current_user)):
+    """Return durable analysis counts and only provider-reported cost data."""
+    return get_analysis_metrics_summary(current_user["user_id"])
+
+
+def build_initial_state(request: LogRequest, telemetry_id: str | None = None) -> dict:
     """Validate mode-specific input and create a sanitized graph state."""
     if request.agent_mode == "load_test" and request.target_agent_count is None:
         raise HTTPException(
@@ -590,6 +597,7 @@ def build_initial_state(request: LogRequest) -> dict:
     return {
         "raw_log": safe_log,
         "analysis_log": compact_repeated_events(safe_log),
+        "telemetry_id": telemetry_id,
         "agent_mode": request.agent_mode,
         "requested_agent_count": request.target_agent_count,
         "is_anomaly": None, "anomaly_reason": None,

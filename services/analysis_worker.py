@@ -20,6 +20,7 @@ from db.database import (
     requeue_stale_analysis_jobs,
     save_incident,
 )
+from utils.telemetry import finish_run, start_run
 
 
 class AnalysisWorker:
@@ -64,6 +65,9 @@ class AnalysisWorker:
     @staticmethod
     def _execute(job: dict) -> None:
         job_started = time.perf_counter()
+        start_run(job["id"])
+        metrics = None
+        queue_wait_ms = None
         try:
             # Import the graph only inside the worker. Authentication, health
             # checks, and job submission never load the expensive LLM/RAG stack.
@@ -128,18 +132,35 @@ class AnalysisWorker:
                 "incident_id": incident_id,
                 "duration_ms": round((time.perf_counter() - job_started) * 1000, 1),
             })
-            complete_analysis_job(job["id"], {"incident_id": incident_id})
+            metrics = finish_run(job["id"])
+            metrics["queue_wait_ms"] = queue_wait_ms
+            metrics["execution_duration_ms"] = round(
+                (time.perf_counter() - job_started) * 1000,
+                1,
+            )
+            complete_analysis_job(
+                job["id"],
+                {"incident_id": incident_id},
+                metrics=metrics,
+            )
             print(
                 f"[JOBS] Analysis job {job['id']} completed "
                 f"duration_ms={round((time.perf_counter() - job_started) * 1000, 1)}"
             )
         except Exception as exc:
+            if metrics is None:
+                metrics = finish_run(job["id"])
+                metrics["queue_wait_ms"] = queue_wait_ms
+                metrics["execution_duration_ms"] = round(
+                    (time.perf_counter() - job_started) * 1000,
+                    1,
+                )
             append_analysis_job_event(job["id"], {
                 "type": "error",
                 "stage": "error",
                 "message": "Analysis failed. Check the service logs for details.",
             })
-            fail_analysis_job(job["id"], type(exc).__name__)
+            fail_analysis_job(job["id"], type(exc).__name__, metrics=metrics)
             print(
                 f"[JOBS] Analysis job {job['id']} failed: "
                 f"{type(exc).__name__}"

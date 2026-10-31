@@ -61,6 +61,7 @@ def spawn_investigators(state: IncidentState):
                 state.get("analysis_log") or state["raw_log"], angle
             ),
             "agent_mode": state.get("agent_mode", "adaptive"),
+                "telemetry_id": state.get("telemetry_id"),
         })
         for angle in angles
     ]

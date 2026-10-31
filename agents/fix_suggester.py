@@ -100,7 +100,11 @@ Respond ONLY with a valid JSON object in this exact format, nothing else, no mar
     "missing_evidence": ["validation required before applying the fix"]
 }}"""
 
-    response = invoke_with_retry(llm, prompt)
+    response = invoke_with_retry(
+        llm,
+        prompt,
+        telemetry_id=state.get("telemetry_id"),
+    )
     raw_output = response.content.strip()
 
     print(
