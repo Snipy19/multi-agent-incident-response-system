@@ -30,6 +30,7 @@ class _RunTelemetry:
     llm_call_failures: int = 0
     llm_duration_ms: float = 0.0
     token_usage: dict[str, int] = field(default_factory=dict)
+    models: set[str] = field(default_factory=set)
 
     def record_attempt(
         self,
@@ -38,6 +39,7 @@ class _RunTelemetry:
         duration_ms: float,
         usage: dict[str, int],
         success: bool,
+        model: str | None,
     ) -> None:
         with self.lock:
             self.llm_calls += 1
@@ -45,6 +47,8 @@ class _RunTelemetry:
             if not success:
                 self.llm_call_failures += 1
             self.llm_duration_ms += max(float(duration_ms), 0.0)
+            if model:
+                self.models.add(model)
             for key, value in usage.items():
                 if isinstance(value, int) and value >= 0:
                     self.token_usage[key] = self.token_usage.get(key, 0) + value
@@ -77,6 +81,7 @@ class _RunTelemetry:
                 "llm_call_failures": self.llm_call_failures,
                 "llm_duration_ms": round(self.llm_duration_ms, 1),
                 "token_usage": token_usage,
+                "models": sorted(self.models),
                 "cost_usd": cost_usd,
                 "cost_status": cost_status,
             }
@@ -98,6 +103,7 @@ def record_llm_attempt(
     duration_ms: float,
     usage: dict[str, int],
     success: bool,
+    model: str | None = None,
 ) -> None:
     if not run_id:
         return
@@ -109,6 +115,7 @@ def record_llm_attempt(
             duration_ms=duration_ms,
             usage=usage,
             success=success,
+            model=model,
         )
 
 
@@ -121,6 +128,7 @@ def finish_run(run_id: str) -> dict:
         "llm_call_failures": 0,
         "llm_duration_ms": 0.0,
         "token_usage": {},
+        "models": [],
         "cost_usd": None,
         "cost_status": "unavailable",
     }

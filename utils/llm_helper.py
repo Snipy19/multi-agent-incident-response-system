@@ -39,12 +39,14 @@ def invoke_with_retry(
                 response = llm.invoke(prompt)
                 duration_ms = round((time.perf_counter() - started) * 1000, 1)
                 usage = _usage_metadata(response)
+                model = _model_name(llm)
                 record_llm_attempt(
                     telemetry_id,
                     attempt=attempt + 1,
                     duration_ms=duration_ms,
                     usage=usage,
                     success=True,
+                    model=model,
                 )
                 usage_fields = " ".join(
                     f"{key}={value}" for key, value in usage.items()
@@ -64,6 +66,7 @@ def invoke_with_retry(
                     duration_ms=duration_ms,
                     usage={},
                     success=False,
+                    model=_model_name(llm),
                 )
                 if attempt == max_retries - 1:
                     _logger.warning(
@@ -108,3 +111,9 @@ def _usage_metadata(response) -> dict[str, int]:
                 result[target] = value
                 break
     return result
+
+
+def _model_name(llm) -> str | None:
+    """Read the actual configured provider model without introducing a fallback."""
+    value = getattr(llm, "model_name", None) or getattr(llm, "model", None)
+    return value.strip() if isinstance(value, str) and value.strip() else None
