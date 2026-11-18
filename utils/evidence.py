@@ -33,33 +33,25 @@ def compact_repeated_events(raw_log: str, max_chars: int = 24000) -> str:
         return str(raw_log or "")[:max_chars]
 
     output = []
-    previous_key = None
-    previous_line = None
-    repeat_count = 0
-
-    def flush():
-        nonlocal previous_key, previous_line, repeat_count
-        if previous_line is None:
-            return
-        output.append(previous_line)
-        if repeat_count > 1:
-            output.append(f"[repeated event x{repeat_count}]")
-        previous_key = previous_line = None
-        repeat_count = 0
+    occurrences = {}
 
     for line in lines:
         normalized = _TIMESTAMP_PREFIX.sub("", line).strip()
-        key = normalized.casefold()
-        if key and key == previous_key:
-            repeat_count += 1
+        key = re.sub(r"\s+", " ", normalized).casefold()
+        if key and key in occurrences:
+            occurrences[key][1] += 1
             continue
-        flush()
-        previous_key = key
-        previous_line = line
-        repeat_count = 1
-    flush()
+        output.append([line, 1, key])
+        if key:
+            occurrences[key] = output[-1]
 
-    compacted = "\n".join(output)
+    compacted_lines = []
+    for line, count, _key in output:
+        compacted_lines.append(line)
+        if count > 1:
+            compacted_lines.append(f"[repeated event x{count}]")
+
+    compacted = "\n".join(compacted_lines)
     if len(compacted) <= max_chars:
         return compacted
     head_size = max_chars * 2 // 3

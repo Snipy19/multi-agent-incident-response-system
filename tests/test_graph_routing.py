@@ -53,3 +53,16 @@ def test_compact_repeated_events_preserves_count_and_order():
     assert "[repeated event x3]" in compacted
     assert compacted.index("checkout timeout") < compacted.index("cache latency")
     assert "2026-10-22T19:00:00Z" in compacted
+
+
+def test_compact_repeated_events_groups_non_adjacent_timestamped_repeats():
+    raw_log = "\n".join([
+        "2026-10-22T19:00:00Z ERROR checkout timeout",
+        "2026-10-22T19:00:01Z WARN cache latency",
+        "2026-10-22T19:00:02Z ERROR checkout timeout",
+    ])
+
+    compacted = compact_repeated_events(raw_log)
+
+    assert "[repeated event x2]" in compacted
+    assert compacted.index("checkout timeout") < compacted.index("cache latency")
