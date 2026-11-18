@@ -60,7 +60,7 @@ Here are similar log patterns observed in real production systems in the past (f
 Analyze this log ONLY from the "{angle}" perspective. Use the reference patterns above if relevant to inform your analysis, but base your finding primarily on the actual log entry. What does this log tell us about potential {angle}-related issues?
 
 Do not treat a numeric confidence value as a calibrated probability. Use it only
-as a rough model estimate and explain the real uncertainty with the fields below.
+as a model-provided evidence estimate and explain the real uncertainty with the fields below.
 Use "Confirmed" only when the log directly proves the finding; use "Strong
 hypothesis" when the evidence is persuasive but a live check is missing; use
 "Inconclusive" when competing explanations remain.
