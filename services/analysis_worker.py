@@ -17,6 +17,8 @@ from db.database import (
     complete_analysis_job,
     fail_analysis_job,
     heartbeat_analysis_job,
+    is_analysis_job_cancel_requested,
+    cancel_running_analysis_job,
     requeue_stale_analysis_jobs,
     save_incident,
 )
@@ -85,6 +87,14 @@ class AnalysisWorker:
             })
             stage_started = time.perf_counter()
             for update in graph_app.stream(job["request_state"], stream_mode="updates"):
+                if is_analysis_job_cancel_requested(job["id"]):
+                    append_analysis_job_event(job["id"], {
+                        "type": "cancelled",
+                        "stage": "cancelled",
+                        "message": "Analysis cancelled at a pipeline boundary.",
+                    })
+                    cancel_running_analysis_job(job["id"])
+                    return
                 for node, node_update in update.items():
                     if not isinstance(node_update, dict):
                         continue

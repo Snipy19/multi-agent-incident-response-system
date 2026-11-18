@@ -31,6 +31,7 @@ from db.database import (
     get_user_by_google_id, create_google_user,
     save_otp, get_otp, delete_otp, verify_otp, consume_otp,
     create_analysis_job, get_analysis_job, get_analysis_metrics_summary,
+    request_analysis_job_cancel,
     consume_rate_limit
 )
 from db.database import get_connection
@@ -571,6 +572,17 @@ def analysis_job_status(job_id: str, current_user: dict = Depends(get_current_us
             if job["status"] == "failed" else None
         ),
     }
+
+
+@app.delete("/analyze/jobs/{job_id}")
+def cancel_analysis_job(job_id: str, current_user: dict = Depends(get_current_user)):
+    """Cancel a queued job or request cooperative cancellation of a running job."""
+    status = request_analysis_job_cancel(job_id, current_user["user_id"])
+    if status is None:
+        raise HTTPException(status_code=404, detail="Analysis job not found")
+    if status in ("completed", "failed", "cancelled"):
+        return {"job_id": job_id, "status": status}
+    return {"job_id": job_id, "status": status}
 
 
 @app.get("/analyze/metrics")

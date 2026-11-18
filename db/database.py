@@ -163,6 +163,7 @@ def init_db():
                 created_at TEXT NOT NULL,
                 started_at TEXT,
                 heartbeat_at TEXT,
+                cancel_requested INTEGER NOT NULL DEFAULT 0,
                 completed_at TEXT
             )
         """)
@@ -192,6 +193,8 @@ def init_db():
             conn.execute("ALTER TABLE analysis_jobs ADD COLUMN heartbeat_at TEXT")
         if "metrics" not in job_columns:
             conn.execute("ALTER TABLE analysis_jobs ADD COLUMN metrics TEXT")
+        if "cancel_requested" not in job_columns:
+            conn.execute("ALTER TABLE analysis_jobs ADD COLUMN cancel_requested INTEGER NOT NULL DEFAULT 0")
     backend = "postgresql" if _uses_postgres() else "sqlite"
     print(f"[DATABASE] Tables are ready ({backend}): users, incidents, password_reset_otps, analysis_jobs")
 
@@ -500,6 +503,48 @@ def heartbeat_analysis_job(job_id: str):
         conn.execute(
             """UPDATE analysis_jobs SET heartbeat_at = ?
                WHERE id = ? AND status = 'running'""",
+            (datetime.now(timezone.utc).isoformat(), job_id),
+        )
+
+
+def request_analysis_job_cancel(job_id: str, user_id: str) -> str | None:
+    """Request cancellation without allowing another user to affect a job."""
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT status FROM analysis_jobs WHERE id = ? AND user_id = ?",
+            (job_id, user_id),
+        ).fetchone()
+        if row is None:
+            return None
+        status = row["status"]
+        if status in ("completed", "failed", "cancelled"):
+            return status
+        conn.execute(
+            "UPDATE analysis_jobs SET cancel_requested = 1 WHERE id = ? AND user_id = ?",
+            (job_id, user_id),
+        )
+        if status == "queued":
+            conn.execute(
+                "UPDATE analysis_jobs SET status = 'cancelled', completed_at = ? WHERE id = ? AND status = 'queued'",
+                (datetime.now(timezone.utc).isoformat(), job_id),
+            )
+            return "cancelled"
+        return "cancellation_requested"
+
+
+def is_analysis_job_cancel_requested(job_id: str) -> bool:
+    with get_connection() as conn:
+        row = conn.execute(
+            "SELECT cancel_requested FROM analysis_jobs WHERE id = ?",
+            (job_id,),
+        ).fetchone()
+    return bool(row and row["cancel_requested"])
+
+
+def cancel_running_analysis_job(job_id: str):
+    with get_connection() as conn:
+        conn.execute(
+            "UPDATE analysis_jobs SET status = 'cancelled', completed_at = ?, heartbeat_at = NULL WHERE id = ? AND status = 'running'",
             (datetime.now(timezone.utc).isoformat(), job_id),
         )
 

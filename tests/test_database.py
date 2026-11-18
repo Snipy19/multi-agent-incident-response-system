@@ -108,6 +108,19 @@ def test_analysis_job_claim_and_completion_round_trip(isolated_database):
     assert stored["heartbeat_at"] is None
 
 
+def test_queued_analysis_job_can_be_cancelled_by_owner(isolated_database):
+    isolated_database.create_analysis_job(
+        "job-cancel",
+        "user-1",
+        {"raw_log": "ERROR timeout", "agent_mode": "adaptive"},
+    )
+
+    assert isolated_database.request_analysis_job_cancel("job-cancel", "user-2") is None
+    assert isolated_database.request_analysis_job_cancel("job-cancel", "user-1") == "cancelled"
+    stored = isolated_database.get_analysis_job("job-cancel", "user-1")
+    assert stored["status"] == "cancelled"
+
+
 def test_analysis_metrics_summary_is_durable_and_user_scoped(isolated_database):
     isolated_database.create_analysis_job(
         "job-metrics-complete",
